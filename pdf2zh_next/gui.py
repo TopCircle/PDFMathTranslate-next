@@ -1595,7 +1595,7 @@ def on_file_upload(files, state):
     )
 
 
-def on_file_clear(files, state):
+def on_file_clear(_files, state):
     """
     Handle file clear/delete event to clean up state and UI.
     When user clicks the X button on file input, this function removes uploaded files
@@ -2351,10 +2351,16 @@ with gr.Blocks(
 
         translation_engine_arg_inputs = []
         detail_text_inputs = []
+        detail_text_input_field_names = []
         require_llm_translator_inputs = []
         detail_text_input_index_map = {}
         term_detail_text_inputs = []
+        term_detail_text_input_field_names = []
         term_detail_text_input_index_map = {}
+        deepseek_thinking_enabled_input = None
+        deepseek_reasoning_effort_input = None
+        term_deepseek_thinking_enabled_input = None
+        term_deepseek_reasoning_effort_input = None
         LLM_support_index_map.clear()
         with gr.Row(elem_classes=["tab-main-row"], equal_height=True):
             # 左侧侧边栏
@@ -2530,7 +2536,19 @@ with gr.Blocks(
                                     original_type = typing.get_origin(type_hint)
                                     type_args = typing.get_args(type_hint)
                                     value = getattr(detail_settings, field_name)
-                                    if (
+                                    if field_name == "deepseek_reasoning_effort":
+                                        field_input = gr.Dropdown(
+                                            label=field.description,
+                                            choices=["high", "max"],
+                                            value=value or "high",
+                                            interactive=True,
+                                            visible=visible
+                                            and bool(
+                                                detail_settings.deepseek_thinking_enabled
+                                            ),
+                                        )
+                                        deepseek_reasoning_effort_input = field_input
+                                    elif (
                                         type_hint is str
                                         or str in type_args
                                         or type_hint is int
@@ -2558,6 +2576,8 @@ with gr.Blocks(
                                             interactive=True,
                                             visible=visible,
                                         )
+                                        if field_name == "deepseek_thinking_enabled":
+                                            deepseek_thinking_enabled_input = field_input
                                     else:
                                         raise Exception(
                                             f"Unsupported type {type_hint} for field {field_name} in gui translation engine settings"
@@ -2567,6 +2587,7 @@ with gr.Blocks(
                                     ].append(detail_index)
                                     detail_index += 1
                                     detail_text_inputs.append(field_input)
+                                    detail_text_input_field_names.append(field_name)
                                     __gui_service_arg_names.append(field_name)
                                     translation_engine_arg_inputs.append(field_input)
                     with gr.Group() as rate_limit_settings:
@@ -2711,7 +2732,18 @@ with gr.Blocks(
                                         type_args = typing.get_args(type_hint)
                                         value = getattr(term_detail_settings, field_name)
 
-                                        if (
+                                        if field_name == "term_deepseek_reasoning_effort":
+                                            field_input = gr.Dropdown(
+                                                label=field.description,
+                                                choices=["high", "max"],
+                                                value=value or "high",
+                                                interactive=True,
+                                                visible=False,
+                                            )
+                                            term_deepseek_reasoning_effort_input = (
+                                                field_input
+                                            )
+                                        elif (
                                             type_hint is str
                                             or str in type_args
                                             or type_hint is int
@@ -2739,6 +2771,10 @@ with gr.Blocks(
                                                 interactive=True,
                                                 visible=False,
                                             )
+                                            if field_name == "term_deepseek_thinking_enabled":
+                                                term_deepseek_thinking_enabled_input = (
+                                                    field_input
+                                                )
                                         else:
                                             raise Exception(
                                                 f"Unsupported type {type_hint} for field {field_name} in gui term extraction engine settings"
@@ -2749,6 +2785,7 @@ with gr.Blocks(
                                         ].append(term_detail_index)
                                         term_detail_index += 1
                                         term_detail_text_inputs.append(field_input)
+                                        term_detail_text_input_field_names.append(field_name)
                                         __gui_term_service_arg_names.append(field_name)
                                         translation_engine_arg_inputs.append(field_input)
 
@@ -3135,7 +3172,7 @@ with gr.Blocks(
             """Update page input visibility based on selection"""
             return gr.update(visible=choice == "Range")
 
-        def on_select_service(service_name):
+        def on_select_service(service_name, deepseek_thinking_enabled=False):
             """Update service-specific settings visibility"""
             if not detail_text_inputs:
                 return
@@ -3161,11 +3198,38 @@ with gr.Blocks(
                     siliconflow_update
                     + glossary_updates
                     + [
-                        gr.update(visible=(i in detail_group_index))
+                            gr.update(
+                                choices=["high", "max"]
+                                if detail_text_input_field_names[i]
+                                == "deepseek_reasoning_effort"
+                                else None,
+                                value="high"
+                                if detail_text_input_field_names[i]
+                                == "deepseek_reasoning_effort"
+                                else gr.skip(),
+                                visible=(i in detail_group_index)
+                                and (
+                                    detail_text_input_field_names[i]
+                                    != "deepseek_reasoning_effort"
+                                    or bool(deepseek_thinking_enabled)
+                                ),
+                            )
                         for i in range(len(detail_text_inputs))
                     ]
                 )
             return return_list
+
+        def on_deepseek_thinking_enabled_change(enabled, service_name):
+            return gr.update(
+                choices=["high", "max"],
+                value="high", visible=enabled and service_name == "DeepSeek"
+            )
+
+        def on_term_deepseek_thinking_enabled_change(enabled, term_service_name):
+            return gr.update(
+                choices=["high", "max"],
+                value="high", visible=enabled and term_service_name == "DeepSeek"
+            )
 
         def on_enhance_compatibility_change(enhance_value):
             """Update skip_clean and disable_rich_text_translate when enhance_compatibility changes"""
@@ -3237,7 +3301,9 @@ with gr.Blocks(
                 gr.update(visible=custom_visible),
             ]
 
-        def on_term_service_change(term_service_name: str):
+        def on_term_service_change(
+            term_service_name: str, term_deepseek_thinking_enabled=False
+        ):
             """Update term engine-specific settings visibility"""
             if not term_detail_text_inputs:
                 return
@@ -3247,13 +3313,26 @@ with gr.Blocks(
             if len(term_detail_text_inputs) == 1:
                 return [gr.update(visible=(0 in detail_group_index))]
             return [
-                gr.update(visible=(i in detail_group_index))
+                gr.update(
+                    value="high"
+                    if term_detail_text_input_field_names[i]
+                    == "term_deepseek_reasoning_effort"
+                    else gr.skip(),
+                    visible=(i in detail_group_index)
+                    and (
+                        term_detail_text_input_field_names[i]
+                        != "term_deepseek_reasoning_effort"
+                        or bool(term_deepseek_thinking_enabled)
+                    ),
+                )
                 for i in range(len(term_detail_text_inputs))
             ]
 
-        def on_service_change_with_rate_limit(mode, service_name):
+        def on_service_change_with_rate_limit(
+            mode, service_name, deepseek_thinking_enabled=False
+        ):
             """Expand original on_select_service with rate-limit-UI updated"""
-            original_updates = on_select_service(service_name)
+            original_updates = on_select_service(service_name, deepseek_thinking_enabled)
 
             rate_limit_visible = service_name != "SiliconFlowFree"
 
@@ -3355,7 +3434,7 @@ with gr.Blocks(
 
         service.select(
             on_service_change_with_rate_limit,
-            [rate_limit_mode, service],
+            [rate_limit_mode, service, deepseek_thinking_enabled_input],
             outputs=(
                 on_select_service_outputs
                 if len(on_select_service_outputs) > 0
@@ -3423,11 +3502,28 @@ with gr.Blocks(
         # Term service change handler
         term_service.change(
             on_term_service_change,
-            term_service,
+            [term_service, term_deepseek_thinking_enabled_input],
             outputs=(
                 term_detail_text_inputs if len(term_detail_text_inputs) > 0 else None
             ),
         )
+
+        if deepseek_thinking_enabled_input and deepseek_reasoning_effort_input:
+            deepseek_thinking_enabled_input.change(
+                on_deepseek_thinking_enabled_change,
+                [deepseek_thinking_enabled_input, service],
+                deepseek_reasoning_effort_input,
+            )
+
+        if (
+            term_deepseek_thinking_enabled_input
+            and term_deepseek_reasoning_effort_input
+        ):
+            term_deepseek_thinking_enabled_input.change(
+                on_term_deepseek_thinking_enabled_change,
+                [term_deepseek_thinking_enabled_input, term_service],
+                term_deepseek_reasoning_effort_input,
+            )
 
         # UI setting controls list (shared by translate_btn and save_btn)
         ui_setting_controls = [
@@ -3813,6 +3909,11 @@ with gr.Blocks(
                             continue
                         value = getattr(detail_settings, field_name)
                         visible = metadata.translate_engine_type == selected_service
+                        if field_name == "deepseek_reasoning_effort":
+                            visible = visible and bool(
+                                detail_settings.deepseek_thinking_enabled
+                            )
+                            value = value or "high"
                         updates.append(gr.update(value=value, visible=visible))
 
                 # Term extraction engine detail fields (ordered)
@@ -3847,6 +3948,11 @@ with gr.Blocks(
                         visible = (
                             term_metadata.translate_engine_type == selected_term_service
                         )
+                        if field_name == "term_deepseek_reasoning_effort":
+                            visible = visible and bool(
+                                term_detail_settings.term_deepseek_thinking_enabled
+                            )
+                            value = value or "high"
                         updates.append(gr.update(value=value, visible=visible))
 
                 # Extra UI components at the end of ui_setting_controls

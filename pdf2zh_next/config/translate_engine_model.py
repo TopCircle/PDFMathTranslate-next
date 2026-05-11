@@ -10,6 +10,7 @@ from typing import TypeAlias
 
 from pydantic import BaseModel
 from pydantic import Field
+from pydantic import PrivateAttr
 from pydantic import create_model
 
 # any field in SENSITIVE_FIELDS will be masked in GUI
@@ -72,6 +73,8 @@ class TranslateEngineSettingError(Exception):
 
 class OpenAISettings(BaseModel):
     """OpenAI API settings"""
+
+    _openai_extra_body: dict[str, typing.Any] | None = PrivateAttr(default=None)
 
     translate_engine_type: Literal["OpenAI"] = Field(default="OpenAI")
     support_llm: Literal["yes", "no"] = Field(
@@ -192,20 +195,39 @@ class DeepSeekSettings(BaseModel):
     deepseek_enable_json_mode: bool | None = Field(
         default=None, description="Enable JSON mode for DeepSeek service"
     )
+    deepseek_thinking_enabled: bool | None = Field(
+        default=False, description="Enable thinking mode for DeepSeek v4 models"
+    )
+    deepseek_reasoning_effort: str | None = Field(
+        default=None, description="Reasoning effort for DeepSeek thinking mode (high/max)"
+    )
 
     def validate_settings(self) -> None:
         if not self.deepseek_api_key:
             raise ValueError("DeepSeek API key is required")
         self.deepseek_api_key = _clean_string(self.deepseek_api_key)
         self.deepseek_model = _clean_string(self.deepseek_model)
+        self.deepseek_reasoning_effort = _clean_string(self.deepseek_reasoning_effort)
+        if self.deepseek_reasoning_effort and self.deepseek_reasoning_effort not in (
+            "high",
+            "max",
+        ):
+            raise ValueError("DeepSeek reasoning effort must be high or max")
 
     def transform(self) -> OpenAISettings:
-        return OpenAISettings(
+        settings = OpenAISettings(
             openai_model=self.deepseek_model,
             openai_api_key=self.deepseek_api_key,
             openai_base_url="https://api.deepseek.com/v1",
             openai_enable_json_mode=self.deepseek_enable_json_mode,
         )
+        if self.deepseek_model and self.deepseek_model.startswith("deepseek-v4-"):
+            thinking_type = "enabled" if self.deepseek_thinking_enabled else "disabled"
+            settings._openai_extra_body = {"thinking": {"type": thinking_type}}
+            if self.deepseek_thinking_enabled and self.deepseek_reasoning_effort:
+                settings.openai_reasoning_effort = self.deepseek_reasoning_effort
+                settings.openai_send_reasoning_effort = True
+        return settings
 
 
 GUI_PASSWORD_FIELDS.append("deepseek_api_key")
