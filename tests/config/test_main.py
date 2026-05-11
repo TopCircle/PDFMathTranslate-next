@@ -46,6 +46,33 @@ class TestBuildArgsParser:
         assert "basic" in field_name2type
         assert "translation" in field_name2type
 
+    def test_deepseek_thinking_false_flag_is_explicit_cli_value(self):
+        """Test DeepSeek thinking can be explicitly disabled from CLI."""
+        parser, _ = build_args_parser()
+
+        args = parser.parse_args(["--deepseek", "--no-deepseek-thinking-enabled"])
+
+        assert args.deepseek is True
+        assert args.deepseek_thinking_enabled is False
+
+    def test_deepseek_thinking_true_flag_is_explicit_cli_value(self):
+        """Test DeepSeek thinking can be explicitly enabled from CLI."""
+        parser, _ = build_args_parser()
+
+        args = parser.parse_args(["--deepseek", "--deepseek-thinking-enabled"])
+
+        assert args.deepseek is True
+        assert args.deepseek_thinking_enabled is True
+
+    def test_deepseek_thinking_omitted_stays_magic_default(self):
+        """Test omitted DeepSeek thinking flags do not override env/config."""
+        parser, _ = build_args_parser()
+
+        args = parser.parse_args(["--deepseek"])
+
+        assert args.deepseek is True
+        assert args.deepseek_thinking_enabled is MagicDefault
+
 
 class TestConfigManager:
     def test_singleton(self):
@@ -133,6 +160,62 @@ class TestConfigManager:
         assert result["qps"] == 10
         # Env settings should take precedence over defaults
         assert result["report_interval"] == 0.5
+
+    def test_deepseek_thinking_cli_false_overrides_env_true(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        """Test --no-deepseek-thinking-enabled overrides env true."""
+        monkeypatch.setenv("PDF2ZH_DEEPSEEK_THINKING_ENABLED", "true")
+        cm = ConfigManager()
+        parser, _ = build_args_parser()
+        args = parser.parse_args(["--deepseek", "--no-deepseek-thinking-enabled"])
+        cli_args = {
+            k.replace("-", "_"): v
+            for k, v in vars(args).items()
+            if v is not MagicDefault
+        }
+
+        merged = cm.merge_settings(
+            [cm.parse_dict_vars(dict_vars=cli_args), cm.parse_env_vars()]
+        )
+
+        assert merged["deepseek_detail"]["deepseek_thinking_enabled"] is False
+
+    def test_deepseek_thinking_cli_omitted_preserves_env_true(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        """Test omitted DeepSeek thinking CLI flags preserve env precedence."""
+        monkeypatch.setenv("PDF2ZH_DEEPSEEK_THINKING_ENABLED", "true")
+        cm = ConfigManager()
+        parser, _ = build_args_parser()
+        args = parser.parse_args(["--deepseek"])
+        cli_args = {
+            k.replace("-", "_"): v
+            for k, v in vars(args).items()
+            if v is not MagicDefault
+        }
+
+        merged = cm.merge_settings(
+            [cm.parse_dict_vars(dict_vars=cli_args), cm.parse_env_vars()]
+        )
+
+        assert merged["deepseek_detail"]["deepseek_thinking_enabled"] is True
+
+    def test_deepseek_thinking_cli_omitted_preserves_config_true(self):
+        """Test omitted DeepSeek thinking CLI flags preserve config precedence."""
+        cm = ConfigManager()
+        parser, _ = build_args_parser()
+        args = parser.parse_args(["--deepseek"])
+        cli_args = {
+            k.replace("-", "_"): v
+            for k, v in vars(args).items()
+            if v is not MagicDefault
+        }
+        config_args = {"deepseek_detail": {"deepseek_thinking_enabled": True}}
+
+        merged = cm.merge_settings([cm.parse_dict_vars(dict_vars=cli_args), config_args])
+
+        assert merged["deepseek_detail"]["deepseek_thinking_enabled"] is True
 
     def test_initialize_config(self, monkeypatch: pytest.MonkeyPatch):
         """Test complete configuration initialization"""

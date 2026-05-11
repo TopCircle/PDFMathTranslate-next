@@ -59,6 +59,21 @@ def get_translation_dic(file_path: Path):
 __gui_service_arg_names = []
 __gui_term_service_arg_names = []
 LLM_support_index_map = {}
+DEEPSEEK_THINKING_CHOICES = [
+    ("Disabled (non-thinking)", False),
+    ("Enabled (thinking)", True),
+]
+
+
+def _deepseek_detail_update(field_name: str, visible: bool):
+    if field_name in {
+        "deepseek_reasoning_effort",
+        "term_deepseek_reasoning_effort",
+    }:
+        return gr.update(choices=["high", "max"], value="high", visible=visible)
+    return gr.update(visible=visible)
+
+
 # The following variables associate strings with specific languages
 lang_map = {
     "English": "en",
@@ -2570,14 +2585,22 @@ with gr.Blocks(
                                                 visible=visible,
                                             )
                                     elif type_hint is bool or bool in type_args:
-                                        field_input = gr.Checkbox(
-                                            label=field.description,
-                                            value=value,
-                                            interactive=True,
-                                            visible=visible,
-                                        )
                                         if field_name == "deepseek_thinking_enabled":
+                                            field_input = gr.Radio(
+                                                label=_("DeepSeek thinking mode"),
+                                                choices=DEEPSEEK_THINKING_CHOICES,
+                                                value=bool(value),
+                                                interactive=True,
+                                                visible=visible,
+                                            )
                                             deepseek_thinking_enabled_input = field_input
+                                        else:
+                                            field_input = gr.Checkbox(
+                                                label=field.description,
+                                                value=value,
+                                                interactive=True,
+                                                visible=visible,
+                                            )
                                     else:
                                         raise Exception(
                                             f"Unsupported type {type_hint} for field {field_name} in gui translation engine settings"
@@ -2765,15 +2788,23 @@ with gr.Blocks(
                                                     visible=False,
                                                 )
                                         elif type_hint is bool or bool in type_args:
-                                            field_input = gr.Checkbox(
-                                                label=field.description,
-                                                value=value,
-                                                interactive=True,
-                                                visible=False,
-                                            )
                                             if field_name == "term_deepseek_thinking_enabled":
+                                                field_input = gr.Radio(
+                                                    label=_("DeepSeek thinking mode"),
+                                                    choices=DEEPSEEK_THINKING_CHOICES,
+                                                    value=bool(value),
+                                                    interactive=True,
+                                                    visible=False,
+                                                )
                                                 term_deepseek_thinking_enabled_input = (
                                                     field_input
+                                                )
+                                            else:
+                                                field_input = gr.Checkbox(
+                                                    label=field.description,
+                                                    value=value,
+                                                    interactive=True,
+                                                    visible=False,
                                                 )
                                         else:
                                             raise Exception(
@@ -3198,16 +3229,9 @@ with gr.Blocks(
                     siliconflow_update
                     + glossary_updates
                     + [
-                            gr.update(
-                                choices=["high", "max"]
-                                if detail_text_input_field_names[i]
-                                == "deepseek_reasoning_effort"
-                                else None,
-                                value="high"
-                                if detail_text_input_field_names[i]
-                                == "deepseek_reasoning_effort"
-                                else gr.skip(),
-                                visible=(i in detail_group_index)
+                            _deepseek_detail_update(
+                                detail_text_input_field_names[i],
+                                (i in detail_group_index)
                                 and (
                                     detail_text_input_field_names[i]
                                     != "deepseek_reasoning_effort"
@@ -3313,12 +3337,9 @@ with gr.Blocks(
             if len(term_detail_text_inputs) == 1:
                 return [gr.update(visible=(0 in detail_group_index))]
             return [
-                gr.update(
-                    value="high"
-                    if term_detail_text_input_field_names[i]
-                    == "term_deepseek_reasoning_effort"
-                    else gr.skip(),
-                    visible=(i in detail_group_index)
+                _deepseek_detail_update(
+                    term_detail_text_input_field_names[i],
+                    (i in detail_group_index)
                     and (
                         term_detail_text_input_field_names[i]
                         != "term_deepseek_reasoning_effort"
