@@ -65,12 +65,23 @@ DEEPSEEK_THINKING_CHOICES = [
 ]
 
 
+def _deepseek_reasoning_effort_update(
+    visible: bool,
+    current_value: str | None = None,
+):
+    return gr.update(
+        choices=["high", "max"],
+        value=current_value or "high",
+        visible=visible,
+    )
+
+
 def _deepseek_detail_update(field_name: str, visible: bool):
     if field_name in {
         "deepseek_reasoning_effort",
         "term_deepseek_reasoning_effort",
     }:
-        return gr.update(choices=["high", "max"], value="high", visible=visible)
+        return _deepseek_reasoning_effort_update(visible=visible)
     return gr.update(visible=visible)
 
 
@@ -3243,16 +3254,20 @@ with gr.Blocks(
                 )
             return return_list
 
-        def on_deepseek_thinking_enabled_change(enabled, service_name):
-            return gr.update(
-                choices=["high", "max"],
-                value="high", visible=enabled and service_name == "DeepSeek"
+        def on_deepseek_thinking_enabled_change(
+            enabled, service_name, deepseek_reasoning_effort
+        ):
+            return _deepseek_reasoning_effort_update(
+                visible=enabled and service_name == "DeepSeek",
+                current_value=deepseek_reasoning_effort,
             )
 
-        def on_term_deepseek_thinking_enabled_change(enabled, term_service_name):
-            return gr.update(
-                choices=["high", "max"],
-                value="high", visible=enabled and term_service_name == "DeepSeek"
+        def on_term_deepseek_thinking_enabled_change(
+            enabled, term_service_name, term_deepseek_reasoning_effort
+        ):
+            return _deepseek_reasoning_effort_update(
+                visible=enabled and term_service_name == "DeepSeek",
+                current_value=term_deepseek_reasoning_effort,
             )
 
         def on_enhance_compatibility_change(enhance_value):
@@ -3532,7 +3547,11 @@ with gr.Blocks(
         if deepseek_thinking_enabled_input and deepseek_reasoning_effort_input:
             deepseek_thinking_enabled_input.change(
                 on_deepseek_thinking_enabled_change,
-                [deepseek_thinking_enabled_input, service],
+                [
+                    deepseek_thinking_enabled_input,
+                    service,
+                    deepseek_reasoning_effort_input,
+                ],
                 deepseek_reasoning_effort_input,
             )
 
@@ -3542,7 +3561,11 @@ with gr.Blocks(
         ):
             term_deepseek_thinking_enabled_input.change(
                 on_term_deepseek_thinking_enabled_change,
-                [term_deepseek_thinking_enabled_input, term_service],
+                [
+                    term_deepseek_thinking_enabled_input,
+                    term_service,
+                    term_deepseek_reasoning_effort_input,
+                ],
                 term_deepseek_reasoning_effort_input,
             )
 

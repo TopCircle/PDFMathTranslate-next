@@ -107,6 +107,25 @@ def test_gui_deepseek_radio_updates_do_not_send_nested_skip(monkeypatch):
     assert reasoning_update["value"] == "high"
 
 
+def test_gui_deepseek_reasoning_effort_update_preserves_current_value(monkeypatch):
+    gui = _gui(monkeypatch)
+
+    enabled_update = gui._deepseek_reasoning_effort_update(
+        visible=True,
+        current_value="max",
+    )
+    disabled_update = gui._deepseek_reasoning_effort_update(
+        visible=False,
+        current_value="max",
+    )
+
+    assert enabled_update["choices"] == ["high", "max"]
+    assert enabled_update["value"] == "max"
+    assert enabled_update["visible"] is True
+    assert disabled_update["value"] == "max"
+    assert disabled_update["visible"] is False
+
+
 def test_gui_disabled_deepseek_current_run_omits_reasoning_effort(tmp_path, monkeypatch):
     gui = _gui(monkeypatch)
 
@@ -182,6 +201,31 @@ def test_term_deepseek_uses_same_boolean_thinking_controls(tmp_path, monkeypatch
     assert settings.term_extraction_engine_settings.openai_reasoning_effort == "max"
 
 
+def test_disabled_term_deepseek_current_run_omits_reasoning_effort(
+    tmp_path, monkeypatch
+):
+    gui = _gui(monkeypatch)
+
+    settings = _build_settings(
+        tmp_path,
+        _base_gui_inputs(
+            term_service="DeepSeek",
+            term_deepseek_model="deepseek-v4-flash",
+            term_deepseek_api_key="dummy-key",
+            term_deepseek_enable_json_mode=False,
+            term_deepseek_thinking_enabled=False,
+            term_deepseek_reasoning_effort="max",
+        ),
+        gui,
+    )
+
+    assert settings.term_extraction_engine_settings._openai_extra_body == {
+        "thinking": {"type": "disabled"}
+    }
+    assert settings.term_extraction_engine_settings.openai_send_reasoning_effort is None
+    assert settings.term_extraction_engine_settings.openai_reasoning_effort is None
+
+
 def test_gui_config_save_persists_selected_deepseek_thinking_settings(
     tmp_path, monkeypatch
 ):
@@ -218,3 +262,41 @@ def test_gui_config_save_persists_selected_deepseek_thinking_settings(
     assert saved.deepseek_detail.deepseek_reasoning_effort == "max"
     assert saved.term_deepseek_detail.term_deepseek_thinking_enabled is False
     assert saved.term_deepseek_detail.term_deepseek_reasoning_effort == "high"
+
+
+def test_gui_config_save_preserves_disabled_deepseek_reasoning_effort(
+    tmp_path, monkeypatch
+):
+    gui = _gui(monkeypatch)
+
+    captured = {}
+
+    class FakeConfigManager:
+        config_cli_settings = CLIEnvSettingsModel()
+
+        def write_user_default_config_file(self, settings):
+            captured["settings"] = settings.clone()
+
+    monkeypatch.setattr(gui, "config_manager", FakeConfigManager())
+
+    _build_settings(
+        tmp_path,
+        _base_gui_inputs(
+            deepseek_thinking_enabled=False,
+            deepseek_reasoning_effort="max",
+            term_service="DeepSeek",
+            term_deepseek_model="deepseek-v4-flash",
+            term_deepseek_api_key="dummy-key",
+            term_deepseek_enable_json_mode=False,
+            term_deepseek_thinking_enabled=False,
+            term_deepseek_reasoning_effort="max",
+        ),
+        gui,
+        save_mode=gui.SaveMode.always,
+    )
+
+    saved = captured["settings"]
+    assert saved.deepseek_detail.deepseek_thinking_enabled is False
+    assert saved.deepseek_detail.deepseek_reasoning_effort == "max"
+    assert saved.term_deepseek_detail.term_deepseek_thinking_enabled is False
+    assert saved.term_deepseek_detail.term_deepseek_reasoning_effort == "max"

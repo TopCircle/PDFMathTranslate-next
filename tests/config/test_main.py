@@ -73,6 +73,19 @@ class TestBuildArgsParser:
         assert args.deepseek is True
         assert args.deepseek_thinking_enabled is MagicDefault
 
+    def test_deepseek_thinking_flags_are_mutually_exclusive(self):
+        """Test ambiguous DeepSeek thinking CLI flags are rejected."""
+        parser, _ = build_args_parser()
+
+        with pytest.raises(SystemExit):
+            parser.parse_args(
+                [
+                    "--deepseek",
+                    "--deepseek-thinking-enabled",
+                    "--no-deepseek-thinking-enabled",
+                ]
+            )
+
 
 class TestConfigManager:
     def test_singleton(self):
