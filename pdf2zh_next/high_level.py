@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 import logging
 import logging.handlers
 import multiprocessing
@@ -579,6 +580,23 @@ def create_babeldoc_config(settings: SettingsModel, file: Path) -> BabelDOCConfi
 
         table_model = RapidOCRModel()
 
+    babeldoc_extra_kwargs = {}
+    babeldoc_config_parameters = inspect.signature(BabelDOCConfig.__init__).parameters
+    if "skip_header" in babeldoc_config_parameters:
+        babeldoc_extra_kwargs.update(
+            {
+                "skip_header": settings.pdf.skip_header,
+                "skip_footer": settings.pdf.skip_footer,
+                "header_height": settings.pdf.header_height,
+                "footer_height": settings.pdf.footer_height,
+            }
+        )
+    elif settings.pdf.skip_header or settings.pdf.skip_footer:
+        logger.warning(
+            "Header/footer filtering requires a BabelDOC version that supports "
+            "skip_header/skip_footer; current BabelDOCConfig does not."
+        )
+
     babeldoc_config = BabelDOCConfig(
         input_file=file,
         font=None,
@@ -627,6 +645,7 @@ def create_babeldoc_config(settings: SettingsModel, file: Path) -> BabelDOCConfi
         # Term extraction translator (can be different from main translator)
         term_extraction_translator=term_extraction_translator,
         term_pool_max_workers=settings.translation.term_pool_max_workers,
+        **babeldoc_extra_kwargs,
     )
     return babeldoc_config
 

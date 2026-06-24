@@ -211,6 +211,22 @@ class PDFSettings(BaseModel):
         default=False,
         description="Skip formula offset calculation during processing",
     )
+    skip_header: bool = Field(
+        default=False,
+        description="Skip translating text fully inside the page header region",
+    )
+    skip_footer: bool = Field(
+        default=False,
+        description="Skip translating text fully inside the page footer region",
+    )
+    header_height: float = Field(
+        default=40,
+        description="Header region height in PDF points",
+    )
+    footer_height: float = Field(
+        default=40,
+        description="Footer region height in PDF points",
+    )
 
 
 class SettingsModel(BaseModel):
@@ -417,6 +433,12 @@ class SettingsModel(BaseModel):
             raise ValueError(
                 "figure_table_protection_threshold must be between 0.0 and 1.0"
             )
+
+        if self.pdf.header_height < 0:
+            raise ValueError("header_height must be greater than or equal to 0")
+
+        if self.pdf.footer_height < 0:
+            raise ValueError("footer_height must be greater than or equal to 0")
 
         if self.pdf.auto_enable_ocr_workaround and self.pdf.ocr_workaround:
             self.pdf.ocr_workaround = False

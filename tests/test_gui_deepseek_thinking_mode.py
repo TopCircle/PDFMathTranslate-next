@@ -54,6 +54,10 @@ def _base_gui_inputs(**overrides):
         "non_formula_line_iou_threshold": 0.5,
         "figure_table_protection_threshold": 0.5,
         "skip_formula_offset_calculation": False,
+        "skip_header": False,
+        "skip_footer": False,
+        "header_height": 40,
+        "footer_height": 40,
         "term_service": "Follow main translation engine",
         "term_rate_limit_mode": "Custom",
         "term_rpm_input": 240,
@@ -191,6 +195,26 @@ def test_gui_unforced_deepseek_current_run_omits_thinking_body(tmp_path, monkeyp
     assert settings.translate_engine_settings._openai_extra_body is None
     assert settings.translate_engine_settings.openai_send_reasoning_effort is None
     assert settings.translate_engine_settings.openai_reasoning_effort is None
+
+
+def test_gui_header_footer_filter_settings(tmp_path, monkeypatch):
+    gui = _gui(monkeypatch)
+
+    settings = _build_settings(
+        tmp_path,
+        _base_gui_inputs(
+            skip_header=True,
+            skip_footer=True,
+            header_height=55,
+            footer_height=35,
+        ),
+        gui,
+    )
+
+    assert settings.pdf.skip_header is True
+    assert settings.pdf.skip_footer is True
+    assert settings.pdf.header_height == 55
+    assert settings.pdf.footer_height == 35
 
 
 def test_gui_disabled_deepseek_current_run_omits_reasoning_effort(tmp_path, monkeypatch):

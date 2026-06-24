@@ -636,6 +636,10 @@ def _build_translate_settings(
         "figure_table_protection_threshold"
     )
     skip_formula_offset_calculation = ui_inputs.get("skip_formula_offset_calculation")
+    skip_header = ui_inputs.get("skip_header")
+    skip_footer = ui_inputs.get("skip_footer")
+    header_height = ui_inputs.get("header_height")
+    footer_height = ui_inputs.get("footer_height")
 
     # Term extraction options
     term_service = ui_inputs.get("term_service")
@@ -831,6 +835,12 @@ def _build_translate_settings(
     translate_settings.pdf.skip_formula_offset_calculation = (
         skip_formula_offset_calculation
     )
+    translate_settings.pdf.skip_header = skip_header
+    translate_settings.pdf.skip_footer = skip_footer
+    if header_height is not None:
+        translate_settings.pdf.header_height = float(header_height)
+    if footer_height is not None:
+        translate_settings.pdf.footer_height = float(footer_height)
 
     assert service in TRANSLATION_ENGINE_METADATA_MAP, "UNKNOW TRANSLATION ENGINE!"
 
@@ -954,6 +964,7 @@ def build_ui_inputs(*args):
             formular_char_pattern, ignore_cache, state, ocr_workaround, auto_enable_ocr_workaround,
             only_include_translated_page, merge_alternating_line_numbers, remove_non_formula_lines,
             non_formula_line_iou_threshold, figure_table_protection_threshold, skip_formula_offset_calculation,
+            skip_header, skip_footer, header_height, footer_height,
             term_service, term_rate_limit_mode, term_rpm_input, term_concurrent_threads_input,
             term_custom_qps_input, term_custom_pool_max_workers_input, *translation_engine_arg_inputs
 
@@ -1005,6 +1016,10 @@ def build_ui_inputs(*args):
         "non_formula_line_iou_threshold",
         "figure_table_protection_threshold",
         "skip_formula_offset_calculation",
+        "skip_header",
+        "skip_footer",
+        "header_height",
+        "footer_height",
         "term_service",
         "term_rate_limit_mode",
         "term_rpm_input",
@@ -3234,6 +3249,36 @@ with gr.Blocks(
                             interactive=True,
                         )
 
+                        gr.Markdown(_("#### Header/Footer Filtering"))
+
+                        with gr.Row():
+                            skip_header = gr.Checkbox(
+                                label=_("Skip Header"),
+                                value=settings.pdf.skip_header,
+                                interactive=True,
+                            )
+                            skip_footer = gr.Checkbox(
+                                label=_("Skip Footer"),
+                                value=settings.pdf.skip_footer,
+                                interactive=True,
+                            )
+
+                        with gr.Row():
+                            header_height = gr.Number(
+                                label=_("Header Height (pt)"),
+                                value=settings.pdf.header_height,
+                                precision=1,
+                                minimum=0,
+                                interactive=True,
+                            )
+                            footer_height = gr.Number(
+                                label=_("Footer Height (pt)"),
+                                value=settings.pdf.footer_height,
+                                precision=1,
+                                minimum=0,
+                                interactive=True,
+                            )
+
                     # （已移动到 tab_main 中）这里保留设置页底部的“保存设置”和技术说明
                     save_btn = gr.Button(_("Save Settings"), variant="secondary", elem_classes=["save-settings-btn"])
 
@@ -3710,6 +3755,10 @@ with gr.Blocks(
             non_formula_line_iou_threshold,
             figure_table_protection_threshold,
             skip_formula_offset_calculation,
+            skip_header,
+            skip_footer,
+            header_height,
+            footer_height,
             # Term extraction engine options
             term_service,
             term_rate_limit_mode,
@@ -3982,6 +4031,10 @@ with gr.Blocks(
                 updates.append(
                     gr.update(value=fresh_settings.pdf.skip_formula_offset_calculation)
                 )
+                updates.append(gr.update(value=fresh_settings.pdf.skip_header))
+                updates.append(gr.update(value=fresh_settings.pdf.skip_footer))
+                updates.append(gr.update(value=fresh_settings.pdf.header_height))
+                updates.append(gr.update(value=fresh_settings.pdf.footer_height))
                 # Term extraction engine basic settings
                 term_engine_enabled = (
                     not fresh_settings.translation.no_auto_extract_glossary

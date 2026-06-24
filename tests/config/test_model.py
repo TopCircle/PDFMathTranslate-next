@@ -105,6 +105,27 @@ class TestPDFSettings:
         assert settings.watermark_output_mode == "watermarked"
         assert settings.max_pages_per_part is None
         assert settings.translate_table_text is True
+        assert settings.skip_header is False
+        assert settings.skip_footer is False
+        assert settings.header_height == 40
+        assert settings.footer_height == 40
+
+    def test_header_footer_height_validation(self):
+        settings = CLIEnvSettingsModel(
+            openai=True,
+            openai_detail={"openai_api_key": "test-key"},
+            pdf={"header_height": -1},
+        ).to_settings_model()
+        with pytest.raises(ValueError, match="header_height"):
+            settings.validate_settings()
+
+        settings = CLIEnvSettingsModel(
+            openai=True,
+            openai_detail={"openai_api_key": "test-key"},
+            pdf={"footer_height": -1},
+        ).to_settings_model()
+        with pytest.raises(ValueError, match="footer_height"):
+            settings.validate_settings()
 
     def test_watermark_mode_validation(self):
         """Test watermark mode validation"""
