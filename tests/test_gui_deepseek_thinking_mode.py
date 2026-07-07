@@ -54,6 +54,7 @@ def _base_gui_inputs(**overrides):
         "non_formula_line_iou_threshold": 0.5,
         "figure_table_protection_threshold": 0.5,
         "skip_formula_offset_calculation": False,
+        "enable_post_layout_optimization": False,
         "skip_header": False,
         "skip_footer": False,
         "header_height": 40,

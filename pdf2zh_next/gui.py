@@ -636,6 +636,7 @@ def _build_translate_settings(
         "figure_table_protection_threshold"
     )
     skip_formula_offset_calculation = ui_inputs.get("skip_formula_offset_calculation")
+    enable_post_layout_optimization = ui_inputs.get("enable_post_layout_optimization")
     skip_header = ui_inputs.get("skip_header")
     skip_footer = ui_inputs.get("skip_footer")
     header_height = ui_inputs.get("header_height")
@@ -820,10 +821,12 @@ def _build_translate_settings(
         translate_settings.pdf.formular_char_pattern = formular_char_pattern
 
     # Apply BabelDOC v0.5.1 new options
-    translate_settings.pdf.no_merge_alternating_line_numbers = (
-        not merge_alternating_line_numbers
-    )
-    translate_settings.pdf.no_remove_non_formula_lines = not remove_non_formula_lines
+    if merge_alternating_line_numbers is not None:
+        translate_settings.pdf.no_merge_alternating_line_numbers = (
+            not merge_alternating_line_numbers
+        )
+    if remove_non_formula_lines is not None:
+        translate_settings.pdf.no_remove_non_formula_lines = not remove_non_formula_lines
     if non_formula_line_iou_threshold is not None:
         translate_settings.pdf.non_formula_line_iou_threshold = float(
             non_formula_line_iou_threshold
@@ -832,11 +835,18 @@ def _build_translate_settings(
         translate_settings.pdf.figure_table_protection_threshold = float(
             figure_table_protection_threshold
         )
-    translate_settings.pdf.skip_formula_offset_calculation = (
-        skip_formula_offset_calculation
-    )
-    translate_settings.pdf.skip_header = skip_header
-    translate_settings.pdf.skip_footer = skip_footer
+    if skip_formula_offset_calculation is not None:
+        translate_settings.pdf.skip_formula_offset_calculation = (
+            skip_formula_offset_calculation
+        )
+    if enable_post_layout_optimization is not None:
+        translate_settings.pdf.enable_post_layout_optimization = (
+            enable_post_layout_optimization
+        )
+    if skip_header is not None:
+        translate_settings.pdf.skip_header = skip_header
+    if skip_footer is not None:
+        translate_settings.pdf.skip_footer = skip_footer
     if header_height is not None:
         translate_settings.pdf.header_height = float(header_height)
     if footer_height is not None:
@@ -964,7 +974,7 @@ def build_ui_inputs(*args):
             formular_char_pattern, ignore_cache, state, ocr_workaround, auto_enable_ocr_workaround,
             only_include_translated_page, merge_alternating_line_numbers, remove_non_formula_lines,
             non_formula_line_iou_threshold, figure_table_protection_threshold, skip_formula_offset_calculation,
-            skip_header, skip_footer, header_height, footer_height,
+            enable_post_layout_optimization, skip_header, skip_footer, header_height, footer_height,
             term_service, term_rate_limit_mode, term_rpm_input, term_concurrent_threads_input,
             term_custom_qps_input, term_custom_pool_max_workers_input, *translation_engine_arg_inputs
 
@@ -1016,6 +1026,7 @@ def build_ui_inputs(*args):
         "non_formula_line_iou_threshold",
         "figure_table_protection_threshold",
         "skip_formula_offset_calculation",
+        "enable_post_layout_optimization",
         "skip_header",
         "skip_footer",
         "header_height",
@@ -3249,6 +3260,15 @@ with gr.Blocks(
                             interactive=True,
                         )
 
+                        enable_post_layout_optimization = gr.Checkbox(
+                            label=_("Enable post-layout optimization"),
+                            info=_(
+                                "Fix overlapping text after typesetting (experimental)"
+                            ),
+                            value=settings.pdf.enable_post_layout_optimization,
+                            interactive=True,
+                        )
+
                         gr.Markdown(_("#### Header/Footer Filtering"))
 
                         with gr.Row():
@@ -3755,6 +3775,7 @@ with gr.Blocks(
             non_formula_line_iou_threshold,
             figure_table_protection_threshold,
             skip_formula_offset_calculation,
+            enable_post_layout_optimization,
             skip_header,
             skip_footer,
             header_height,
@@ -4030,6 +4051,11 @@ with gr.Blocks(
                 )
                 updates.append(
                     gr.update(value=fresh_settings.pdf.skip_formula_offset_calculation)
+                )
+                updates.append(
+                    gr.update(
+                        value=fresh_settings.pdf.enable_post_layout_optimization
+                    )
                 )
                 updates.append(gr.update(value=fresh_settings.pdf.skip_header))
                 updates.append(gr.update(value=fresh_settings.pdf.skip_footer))

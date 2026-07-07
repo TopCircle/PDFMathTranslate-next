@@ -211,6 +211,10 @@ class PDFSettings(BaseModel):
         default=False,
         description="Skip formula offset calculation during processing",
     )
+    enable_post_layout_optimization: bool = Field(
+        default=False,
+        description="Enable post-layout optimization to fix overlapping text after typesetting",
+    )
     skip_header: bool = Field(
         default=False,
         description="Skip translating text fully inside the page header region",
