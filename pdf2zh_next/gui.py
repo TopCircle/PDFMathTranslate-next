@@ -641,6 +641,9 @@ def _build_translate_settings(
     skip_footer = ui_inputs.get("skip_footer")
     header_height = ui_inputs.get("header_height")
     footer_height = ui_inputs.get("footer_height")
+    quote_narrow_threshold = ui_inputs.get("quote_narrow_threshold")
+    quote_indent_threshold = ui_inputs.get("quote_indent_threshold")
+    quote_right_margin_threshold = ui_inputs.get("quote_right_margin_threshold")
 
     # Term extraction options
     term_service = ui_inputs.get("term_service")
@@ -851,6 +854,12 @@ def _build_translate_settings(
         translate_settings.pdf.header_height = float(header_height)
     if footer_height is not None:
         translate_settings.pdf.footer_height = float(footer_height)
+    if quote_narrow_threshold is not None:
+        translate_settings.pdf.quote_narrow_threshold = float(quote_narrow_threshold)
+    if quote_indent_threshold is not None:
+        translate_settings.pdf.quote_indent_threshold = float(quote_indent_threshold)
+    if quote_right_margin_threshold is not None:
+        translate_settings.pdf.quote_right_margin_threshold = float(quote_right_margin_threshold)
 
     assert service in TRANSLATION_ENGINE_METADATA_MAP, "UNKNOW TRANSLATION ENGINE!"
 
@@ -975,6 +984,7 @@ def build_ui_inputs(*args):
             only_include_translated_page, merge_alternating_line_numbers, remove_non_formula_lines,
             non_formula_line_iou_threshold, figure_table_protection_threshold, skip_formula_offset_calculation,
             enable_post_layout_optimization, skip_header, skip_footer, header_height, footer_height,
+            quote_narrow_threshold, quote_indent_threshold, quote_right_margin_threshold,
             term_service, term_rate_limit_mode, term_rpm_input, term_concurrent_threads_input,
             term_custom_qps_input, term_custom_pool_max_workers_input, *translation_engine_arg_inputs
 
@@ -1031,6 +1041,9 @@ def build_ui_inputs(*args):
         "skip_footer",
         "header_height",
         "footer_height",
+        "quote_narrow_threshold",
+        "quote_indent_threshold",
+        "quote_right_margin_threshold",
         "term_service",
         "term_rate_limit_mode",
         "term_rpm_input",
@@ -3299,6 +3312,44 @@ with gr.Blocks(
                                 interactive=True,
                             )
 
+                        gr.Markdown(_("#### Quote Block Detection"))
+
+                        quote_narrow_threshold = gr.Slider(
+                            label=_("Quote Narrow Threshold"),
+                            info=_(
+                                "Width ratio threshold for Quote detection (paragraph width / page width)"
+                            ),
+                            value=settings.pdf.quote_narrow_threshold,
+                            minimum=0.1,
+                            maximum=1.0,
+                            step=0.05,
+                            interactive=True,
+                        )
+
+                        with gr.Row():
+                            quote_indent_threshold = gr.Slider(
+                                label=_("Quote Indent Threshold"),
+                                info=_(
+                                    "Left indent ratio threshold (indent / page width)"
+                                ),
+                                value=settings.pdf.quote_indent_threshold,
+                                minimum=0.0,
+                                maximum=0.5,
+                                step=0.01,
+                                interactive=True,
+                            )
+                            quote_right_margin_threshold = gr.Slider(
+                                label=_("Quote Right Margin Threshold"),
+                                info=_(
+                                    "Right margin ratio threshold (margin / page width)"
+                                ),
+                                value=settings.pdf.quote_right_margin_threshold,
+                                minimum=0.0,
+                                maximum=0.5,
+                                step=0.01,
+                                interactive=True,
+                            )
+
                     # （已移动到 tab_main 中）这里保留设置页底部的“保存设置”和技术说明
                     save_btn = gr.Button(_("Save Settings"), variant="secondary", elem_classes=["save-settings-btn"])
 
@@ -3780,6 +3831,10 @@ with gr.Blocks(
             skip_footer,
             header_height,
             footer_height,
+            # Quote block detection settings
+            quote_narrow_threshold,
+            quote_indent_threshold,
+            quote_right_margin_threshold,
             # Term extraction engine options
             term_service,
             term_rate_limit_mode,

@@ -231,6 +231,18 @@ class PDFSettings(BaseModel):
         default=40,
         description="Footer region height in PDF points",
     )
+    quote_narrow_threshold: float = Field(
+        default=0.8,
+        description="Quote block detection: width ratio threshold (paragraph width / page width < this value)",
+    )
+    quote_indent_threshold: float = Field(
+        default=0.05,
+        description="Quote block detection: left indent ratio threshold (left indent / page width > this value)",
+    )
+    quote_right_margin_threshold: float = Field(
+        default=0.05,
+        description="Quote block detection: right margin ratio threshold (right margin / page width > this value)",
+    )
 
 
 class SettingsModel(BaseModel):

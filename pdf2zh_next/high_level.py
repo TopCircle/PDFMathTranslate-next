@@ -607,6 +607,16 @@ def create_babeldoc_config(settings: SettingsModel, file: Path) -> BabelDOCConfi
             "enable_post_layout_optimization; current BabelDOCConfig does not."
         )
 
+    # Quote block detection settings — guarded for forward-compatibility
+    if "quote_narrow_threshold" in babeldoc_config_parameters:
+        babeldoc_extra_kwargs.update(
+            {
+                "quote_narrow_threshold": settings.pdf.quote_narrow_threshold,
+                "quote_indent_threshold": settings.pdf.quote_indent_threshold,
+                "quote_right_margin_threshold": settings.pdf.quote_right_margin_threshold,
+            }
+        )
+
     # BabelDOC v0.5.1 options — guarded for forward-compatibility
     if "merge_alternating_line_numbers" in babeldoc_config_parameters:
         babeldoc_extra_kwargs.update(
