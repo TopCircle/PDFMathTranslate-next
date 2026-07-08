@@ -4116,6 +4116,16 @@ with gr.Blocks(
                 updates.append(gr.update(value=fresh_settings.pdf.skip_footer))
                 updates.append(gr.update(value=fresh_settings.pdf.header_height))
                 updates.append(gr.update(value=fresh_settings.pdf.footer_height))
+                # Quote block detection settings
+                updates.append(
+                    gr.update(value=fresh_settings.pdf.quote_narrow_threshold)
+                )
+                updates.append(
+                    gr.update(value=fresh_settings.pdf.quote_indent_threshold)
+                )
+                updates.append(
+                    gr.update(value=fresh_settings.pdf.quote_right_margin_threshold)
+                )
                 # Term extraction engine basic settings
                 term_engine_enabled = (
                     not fresh_settings.translation.no_auto_extract_glossary
