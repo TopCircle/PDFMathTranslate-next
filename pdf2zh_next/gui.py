@@ -2428,7 +2428,13 @@ update_current_languages(settings.gui_settings.ui_lang)
 with gr.Blocks(
     title="PDFMathTranslate - PDF Translation with preserved formats",
     theme=gr.themes.Default(
-        primary_hue=custom_blue, spacing_size="md", radius_size="lg"
+        primary_hue=custom_blue, spacing_size="md", radius_size="lg",
+        font=[
+            gr.themes.GoogleFont("Inter"),
+            "ui-sans-serif",
+            "system-ui",
+            "sans-serif",
+        ],
     ),
     css=custom_css,
 ) as demo:
