@@ -6,6 +6,7 @@ from pathlib import Path
 from shutil import which
 
 from pdf2zh_next.config.model import SettingsModel
+from pdf2zh_next.config.translate_engine_model import CLISettings
 from pdf2zh_next.translator.base_rate_limiter import BaseRateLimiter
 from pdf2zh_next.translator.base_translator import BaseTranslator
 from tenacity import before_sleep_log
@@ -18,22 +19,19 @@ logger = logging.getLogger(__name__)
 
 
 class CLITranslatorTranslator(BaseTranslator):
-    """CLI translator that can call any external translation tool
+    """CLI translator that calls an external tool via stdin → stdout.
 
-    This translator allows you to use any CLI tool for translation by specifying
-    the command and arguments. Input text is always provided via stdin.
+    Prefer decomposed CLISettings fields (program, script, glossary, urls, …)
+    so the GUI can show them like other engines. A legacy full
+    ``clitranslator_command`` string still overrides when set.
 
-    Example configurations:
+    Example (deeplx adapter)::
 
-    1. Basic usage:
-       clitranslator_command: "your-translator-command --flag value"
-
-    2. Custom flags:
-       clitranslator_command: "your-translator-command --from en --to ja"
-
-    3. Postprocess command (e.g. jq):
-       clitranslator_command: "your-translator-command --format json"
-       clitranslator_postprocess_command: "jq -r .result.translation"
+        program: python3
+        script: /root/.config/pdf2zh/deeplx/deeplx.py
+        glossary: /root/.config/pdf2zh/glossaries/sextips.csv
+        proper_nouns: /root/.config/pdf2zh/glossaries/proper_nouns.csv
+        urls: one DeepLX endpoint per line
     """
 
     name = "clitranslator"
@@ -45,24 +43,27 @@ class CLITranslatorTranslator(BaseTranslator):
     ):
         super().__init__(settings, rate_limiter)
         cli_settings = settings.translate_engine_settings
-        self.command_string = cli_settings.clitranslator_command
-
-        try:
-            command_parts = shlex.split(self.command_string)
-        except ValueError as e:
-            raise ValueError(f"Invalid clitranslator_command: {e}") from e
-        if not command_parts:
-            raise ValueError(
-                "CLI command is required. Please specify --clitranslator-command"
+        if not isinstance(cli_settings, CLISettings):
+            raise TypeError(
+                f"Expected CLISettings, got {type(cli_settings).__name__}"
             )
 
+        try:
+            command_parts = cli_settings.build_command_parts()
+        except ValueError as e:
+            raise ValueError(f"Invalid CLI translator settings: {e}") from e
+        if not command_parts:
+            raise ValueError(
+                "CLI program is required. Fill program/script (or full command)."
+            )
+
+        self.command_string = cli_settings.build_command_string()
         self.command = command_parts[0]
         self.args = command_parts[1:]
-        self.timeout = cli_settings.clitranslator_timeout
+        self.timeout = cli_settings.resolved_timeout()
         self.postprocess_command_string = cli_settings.clitranslator_postprocess_command
         self.postprocess_command = None
         if self.postprocess_command_string:
-            # Parse once so invalid quoting fails early and the command is cache-keyed.
             try:
                 postprocess_parts = shlex.split(self.postprocess_command_string)
             except ValueError as e:
@@ -73,8 +74,9 @@ class CLITranslatorTranslator(BaseTranslator):
                 raise ValueError("clitranslator_postprocess_command cannot be empty")
             self.postprocess_command = postprocess_parts
 
-        # Add cache impact parameters
+        # Cache distinguishes command line + timeout
         self.add_cache_impact_parameters("clitranslator_command", self.command_string)
+        self.add_cache_impact_parameters("clitranslator_timeout", self.timeout)
         if self.postprocess_command_string:
             self.add_cache_impact_parameters(
                 "clitranslator_postprocess_command", self.postprocess_command_string
@@ -84,6 +86,12 @@ class CLITranslatorTranslator(BaseTranslator):
         self._test_command(self.command, label="CLI")
         if self.postprocess_command:
             self._test_command(self.postprocess_command[0], label="Postprocess")
+
+        logger.info(
+            "CLITranslator ready: cmd=%r timeout=%ss",
+            self.command_string,
+            self.timeout,
+        )
 
     def _test_command(self, command: str, label: str):
         """Validate that the command is executable or discoverable on PATH."""
@@ -124,7 +132,6 @@ class CLITranslatorTranslator(BaseTranslator):
         try:
             logger.debug(f"Executing CLI command: {' '.join(cmd)}")
 
-            # Pass text via stdin
             process = subprocess.Popen(
                 cmd,
                 stdin=subprocess.PIPE,
@@ -149,7 +156,6 @@ class CLITranslatorTranslator(BaseTranslator):
 
             output = stdout
             if self.postprocess_command:
-                # Allow arbitrary stdout transformation (e.g., jq).
                 output = self._run_postprocess(output)
 
             return output.strip()

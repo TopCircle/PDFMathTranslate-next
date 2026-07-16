@@ -242,40 +242,78 @@ class TestOpenAISettings:
 
 
 class TestCLISettings:
-    def test_valid_command_with_args_and_stdin_default(self):
+    def test_decomposed_deeplx_style_command(self):
         settings = CLISettings(
-            clitranslator_command="your-translator-command --flag value"
+            clitranslator_program="python3",
+            clitranslator_script="/root/.config/pdf2zh/deeplx/deeplx.py",
+            clitranslator_glossary="/root/.config/pdf2zh/glossaries/sextips.csv",
+            clitranslator_proper_nouns="/root/.config/pdf2zh/glossaries/proper_nouns.csv",
+            clitranslator_urls=(
+                "https://deeplx.orange.cloudns.be/translate\n"
+                "https://api.deeplx.org/token/translate"
+            ),
+            clitranslator_timeout="120",
         )
         settings.validate_settings()
+        parts = settings.build_command_parts()
+        assert parts[0] == "python3"
+        assert parts[1].endswith("deeplx.py")
+        assert "--glossary" in parts
+        assert "--proper-nouns" in parts
+        assert parts.count("--url") == 2
+        assert settings.resolved_timeout() == 120
 
-    def test_requires_command(self):
-        settings = CLISettings(clitranslator_command="")
-        with pytest.raises(ValueError, match="CLI command is required"):
+    def test_legacy_full_command_override(self):
+        settings = CLISettings(
+            clitranslator_program="python3",
+            clitranslator_script="/ignored.py",
+            clitranslator_command="your-translator-command --flag value",
+        )
+        settings.validate_settings()
+        assert settings.build_command_parts() == [
+            "your-translator-command",
+            "--flag",
+            "value",
+        ]
+
+    def test_requires_program_or_full_command(self):
+        settings = CLISettings(clitranslator_program="", clitranslator_command=None)
+        with pytest.raises(ValueError, match="CLI program"):
             settings.validate_settings()
 
-    def test_invalid_cli_command(self):
+    def test_invalid_legacy_cli_command(self):
         settings = CLISettings(
             clitranslator_command="your-translator-command 'unterminated"
         )
-        with pytest.raises(ValueError, match="Invalid clitranslator_command"):
+        with pytest.raises(ValueError, match="No closing quotation|Invalid"):
             settings.validate_settings()
 
     def test_valid_postprocess_command(self):
         settings = CLISettings(
-            clitranslator_command="your-translator-command",
+            clitranslator_program="your-translator-command",
             clitranslator_postprocess_command="jq -r .result.translation",
         )
         settings.validate_settings()
 
     def test_invalid_postprocess_command(self):
         settings = CLISettings(
-            clitranslator_command="your-translator-command",
+            clitranslator_program="your-translator-command",
             clitranslator_postprocess_command="jq 'unterminated",
         )
         with pytest.raises(
             ValueError, match="Invalid clitranslator_postprocess_command"
         ):
             settings.validate_settings()
+
+    def test_urls_split_by_comma_or_newline(self):
+        settings = CLISettings(
+            clitranslator_program="python3",
+            clitranslator_urls="https://a.example/t, https://b.example/t",
+        )
+        assert settings._url_list() == [
+            "https://a.example/t",
+            "https://b.example/t",
+        ]
 
     def test_base_url_handling(self):
         """Test base URL handling"""

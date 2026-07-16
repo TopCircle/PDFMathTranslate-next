@@ -882,54 +882,166 @@ class ClaudeCodeSettings(BaseModel):
 
 
 class CLISettings(BaseModel):
-    """CLI translator settings
+    """CLI translator settings (stdin → stdout external tool).
 
-    This allows you to use any external CLI translation tool.
+    Prefer the decomposed fields (like other engines in the UI). Example for deeplx::
 
-    Input text is always passed via stdin.
+        program: python3
+        script: /root/.config/pdf2zh/deeplx/deeplx.py
+        glossary: /root/.config/pdf2zh/glossaries/sextips.csv
+        proper_nouns: /root/.config/pdf2zh/glossaries/proper_nouns.csv
+        urls: (one URL per line)
+        https://deeplx.example/translate
 
-    Example (stdin, default):
-    - clitranslator_command: "your-translator-command --flag value"
+    Advanced: set ``clitranslator_command`` to a full shell command string to
+    override the decomposed fields (legacy configs still work).
     """
 
     translate_engine_type: Literal["CLITranslator"] = Field(default="CLITranslator")
     support_llm: Literal["yes", "no"] = Field(default="no")
 
-    clitranslator_command: str = Field(
-        default="",
+    clitranslator_program: str = Field(
+        default="python3",
+        description="Executable (e.g. python3, deeplx, /usr/local/bin/translate)",
+    )
+    clitranslator_script: str | None = Field(
+        default=None,
         description=(
-            "CLI command to execute. May include arguments and will be split like a "
-            "shell command (e.g., 'your-translator-command --flag value')."
+            "Optional script/path after the executable "
+            "(e.g. /root/.config/pdf2zh/deeplx/deeplx.py)"
         ),
     )
-    clitranslator_timeout: int = Field(
-        default=60,
-        description="Command timeout in seconds",
-        ge=1,
-        le=300,
+    clitranslator_glossary: str | None = Field(
+        default=None,
+        description="Glossary CSV path (appended as --glossary PATH)",
+    )
+    clitranslator_proper_nouns: str | None = Field(
+        default=None,
+        description="Proper-nouns file path (appended as --proper-nouns PATH)",
+    )
+    clitranslator_urls: str | None = Field(
+        default=None,
+        description=(
+            "API endpoints, one URL per line (each becomes --url URL). "
+            "Useful for DeepLX multi-endpoint failover."
+        ),
+    )
+    clitranslator_extra_args: str | None = Field(
+        default=None,
+        description=(
+            "Extra CLI arguments (shell-style), e.g. "
+            "'--debug --max-retries 8 --cooldown-seconds 120'"
+        ),
+    )
+    clitranslator_timeout: str | int | None = Field(
+        default="120",
+        description="Command timeout in seconds (1-300, default 120)",
     )
     clitranslator_postprocess_command: str | None = Field(
         default=None,
         description=(
-            "Optional postprocess command to run on CLI output (reads from stdin). "
+            "Optional postprocess command on CLI stdout (reads stdin). "
             "Example: 'jq -r .result.translation'"
         ),
     )
+    clitranslator_command: str | None = Field(
+        default=None,
+        description=(
+            "(Advanced) Full command string. If set, overrides program/script/"
+            "glossary/urls/extra_args above. Example: "
+            "'python3 /path/deeplx.py --glossary g.csv --url https://...'"
+        ),
+    )
+
+    def _url_list(self) -> list[str]:
+        if not self.clitranslator_urls:
+            return []
+        urls: list[str] = []
+        for line in self.clitranslator_urls.replace(",", "\n").splitlines():
+            u = line.strip().replace("\xa0", "")
+            if u:
+                urls.append(u)
+        return urls
+
+    def build_command_parts(self) -> list[str]:
+        """Assemble argv for subprocess (legacy full command or decomposed fields)."""
+        # Legacy / advanced override
+        if self.clitranslator_command and self.clitranslator_command.strip():
+            return shlex.split(self.clitranslator_command)
+
+        parts: list[str] = []
+        program = (self.clitranslator_program or "").strip()
+        if not program:
+            raise ValueError("CLI program is required (e.g. python3)")
+        # Allow "python3 -u" as program
+        parts.extend(shlex.split(program))
+
+        if self.clitranslator_script and self.clitranslator_script.strip():
+            parts.append(self.clitranslator_script.strip())
+
+        if self.clitranslator_glossary and self.clitranslator_glossary.strip():
+            parts.extend(["--glossary", self.clitranslator_glossary.strip()])
+
+        if self.clitranslator_proper_nouns and self.clitranslator_proper_nouns.strip():
+            parts.extend(
+                ["--proper-nouns", self.clitranslator_proper_nouns.strip()]
+            )
+
+        for url in self._url_list():
+            parts.extend(["--url", url])
+
+        if self.clitranslator_extra_args and self.clitranslator_extra_args.strip():
+            parts.extend(shlex.split(self.clitranslator_extra_args))
+
+        return parts
+
+    def build_command_string(self) -> str:
+        """Shell-ish form for logging and cache keys."""
+        return shlex.join(self.build_command_parts())
+
+    def resolved_timeout(self) -> int:
+        raw = self.clitranslator_timeout
+        if raw is None or (isinstance(raw, str) and not str(raw).strip()):
+            return 120
+        try:
+            value = int(float(str(raw).strip()))
+        except ValueError as e:
+            raise ValueError("CLI timeout must be an integer (seconds)") from e
+        if value < 1 or value > 300:
+            raise ValueError("CLI timeout must be between 1 and 300 seconds")
+        return value
 
     def validate_settings(self):
-        if not self.clitranslator_command:
-            raise ValueError(
-                "CLI command is required. Please specify --clitranslator-command"
-            )
+        self.clitranslator_program = _clean_string(self.clitranslator_program) or ""
+        self.clitranslator_script = _clean_string(self.clitranslator_script)
+        self.clitranslator_glossary = _clean_string(self.clitranslator_glossary)
+        self.clitranslator_proper_nouns = _clean_string(self.clitranslator_proper_nouns)
+        self.clitranslator_urls = _clean_string(self.clitranslator_urls)
+        self.clitranslator_extra_args = _clean_string(self.clitranslator_extra_args)
+        if self.clitranslator_timeout is not None and not isinstance(
+            self.clitranslator_timeout, str
+        ):
+            self.clitranslator_timeout = str(self.clitranslator_timeout)
+        self.clitranslator_timeout = _clean_string(self.clitranslator_timeout)
+        self.clitranslator_postprocess_command = _clean_string(
+            self.clitranslator_postprocess_command
+        )
+        self.clitranslator_command = _clean_string(self.clitranslator_command)
 
         try:
-            command_parts = shlex.split(self.clitranslator_command)
-        except ValueError as e:
-            raise ValueError(f"Invalid clitranslator_command: {e}") from e
-        if not command_parts:
+            parts = self.build_command_parts()
+        except ValueError:
+            raise
+        except Exception as e:
+            raise ValueError(f"Invalid CLI command fields: {e}") from e
+
+        if not parts:
             raise ValueError(
-                "CLI command is required. Please specify --clitranslator-command"
+                "CLI program (or full clitranslator_command) is required"
             )
+
+        # timeout
+        self.resolved_timeout()
 
         if self.clitranslator_postprocess_command is not None:
             if not self.clitranslator_postprocess_command.strip():
