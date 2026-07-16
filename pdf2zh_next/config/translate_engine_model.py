@@ -933,7 +933,9 @@ class CLISettings(BaseModel):
             "'--debug --max-retries 8 --cooldown-seconds 120'"
         ),
     )
-    clitranslator_timeout: str | int | None = Field(
+    # Must be a single argparse type (str | None only). Union with int
+    # registers --clitranslator-timeout twice and breaks `pdf2zh --version`.
+    clitranslator_timeout: str | None = Field(
         default="120",
         description="Command timeout in seconds (1-300, default 120)",
     )
