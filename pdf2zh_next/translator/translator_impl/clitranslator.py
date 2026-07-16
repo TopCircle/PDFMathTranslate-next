@@ -1,3 +1,4 @@
+import hashlib
 import logging
 import os
 import shlex
@@ -16,6 +17,65 @@ from tenacity import stop_after_attempt
 from tenacity import wait_exponential
 
 logger = logging.getLogger(__name__)
+
+# Flags whose following argv value is a local file that affects translation.
+_CACHE_FILE_FLAGS = ("--glossary", "--proper-nouns")
+
+
+def _file_content_fingerprint(path: str) -> str:
+    """SHA-256 of file contents (or a stable marker if unreadable).
+
+    Used so cache keys change when glossary/proper-nouns content changes
+    even if the path (and thus the command string) stays the same.
+    """
+    p = Path(path)
+    try:
+        if not p.is_file():
+            return f"missing:{path}"
+        h = hashlib.sha256()
+        with p.open("rb") as f:
+            for chunk in iter(lambda: f.read(65536), b""):
+                h.update(chunk)
+        return f"{path}:{h.hexdigest()}"
+    except OSError as e:
+        return f"error:{path}:{type(e).__name__}"
+
+
+def _collect_cache_file_paths(
+    cli_settings: CLISettings, command_parts: list[str]
+) -> list[str]:
+    """Glossary / proper-nouns paths from settings fields and/or argv flags."""
+    seen: set[str] = set()
+    paths: list[str] = []
+
+    def _add(raw: str | None) -> None:
+        if not raw:
+            return
+        path = raw.strip()
+        if not path or path in seen:
+            return
+        seen.add(path)
+        paths.append(path)
+
+    _add(cli_settings.clitranslator_glossary)
+    _add(cli_settings.clitranslator_proper_nouns)
+
+    # Legacy full command / extra_args may pass the same flags.
+    i = 0
+    while i < len(command_parts):
+        part = command_parts[i]
+        if part in _CACHE_FILE_FLAGS and i + 1 < len(command_parts):
+            _add(command_parts[i + 1])
+            i += 2
+            continue
+        for flag in _CACHE_FILE_FLAGS:
+            prefix = f"{flag}="
+            if part.startswith(prefix):
+                _add(part[len(prefix) :])
+                break
+        i += 1
+
+    return paths
 
 
 class CLITranslatorTranslator(BaseTranslator):
@@ -74,13 +134,18 @@ class CLITranslatorTranslator(BaseTranslator):
                 raise ValueError("clitranslator_postprocess_command cannot be empty")
             self.postprocess_command = postprocess_parts
 
-        # Cache distinguishes command line + timeout
+        # Cache distinguishes command line + timeout + glossary file *contents*
+        # (path-only keys miss updates when CSV content changes in place).
         self.add_cache_impact_parameters("clitranslator_command", self.command_string)
         self.add_cache_impact_parameters("clitranslator_timeout", self.timeout)
         if self.postprocess_command_string:
             self.add_cache_impact_parameters(
                 "clitranslator_postprocess_command", self.postprocess_command_string
             )
+        for path in _collect_cache_file_paths(cli_settings, command_parts):
+            fp = _file_content_fingerprint(path)
+            self.add_cache_impact_parameters(f"clitranslator_file:{path}", fp)
+            logger.debug("CLITranslator cache file fingerprint %s -> %s", path, fp)
 
         # Best-effort availability check (does not assume --version support).
         self._test_command(self.command, label="CLI")
