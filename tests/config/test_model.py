@@ -6,7 +6,13 @@ from pdf2zh_next.config.model import BasicSettings
 from pdf2zh_next.config.model import PDFSettings
 from pdf2zh_next.config.model import TranslationSettings
 from pdf2zh_next.config.translate_engine_model import CLISettings
+from pdf2zh_next.config.translate_engine_model import GrokSettings
+from pdf2zh_next.config.translate_engine_model import ModelScopeSettings
 from pdf2zh_next.config.translate_engine_model import OpenAISettings
+from pdf2zh_next.config.translate_engine_model import TRANSLATION_ENGINE_METADATA
+from pdf2zh_next.config.translate_engine_model import TRANSLATION_ENGINE_METADATA_MAP
+from pdf2zh_next.config.translate_engine_model import TRANSLATION_ENGINE_SETTING_CLASSES
+from pdf2zh_next.config.translate_engine_model import define_openai_compat_engine
 
 
 class TestBasicSettings:
@@ -239,6 +245,53 @@ class TestOpenAISettings:
         assert settings.openai_model == "gpt-4"
         assert settings.openai_base_url == "http://api.example.com"
         assert settings.openai_api_key == "test-key"
+
+
+class TestEngineRegistry:
+    def test_registry_matches_metadata(self):
+        assert len(TRANSLATION_ENGINE_SETTING_CLASSES) == len(TRANSLATION_ENGINE_METADATA)
+        assert len(TRANSLATION_ENGINE_METADATA_MAP) == len(TRANSLATION_ENGINE_METADATA)
+        for cls, meta in zip(
+            TRANSLATION_ENGINE_SETTING_CLASSES, TRANSLATION_ENGINE_METADATA, strict=True
+        ):
+            assert meta.setting_model_type is cls
+            assert meta.translate_engine_type == cls.model_fields[
+                "translate_engine_type"
+            ].default
+
+    def test_openai_compat_factory_preserves_fields_and_transform(self):
+        settings = GrokSettings(grok_api_key="secret-key")
+        settings.validate_settings()
+        assert settings.grok_model == "grok-2-1212"
+        openai = settings.transform()
+        assert isinstance(openai, OpenAISettings)
+        assert openai.openai_api_key == "secret-key"
+        assert openai.openai_base_url == "https://api.x.ai/v1"
+        assert openai.translate_engine_type == "OpenAI"
+
+    def test_modelscope_factory_fields(self):
+        settings = ModelScopeSettings(
+            modelscope_api_key="k",
+            modelscope_model="Qwen/Qwen2.5-32B-Instruct",
+        )
+        settings.validate_settings()
+        openai = settings.transform()
+        assert openai.openai_base_url == "https://api-inference.modelscope.cn/v1"
+
+    def test_define_openai_compat_engine_custom(self):
+        Custom = define_openai_compat_engine(
+            engine_type="CustomCompat",
+            prefix="customcompat",
+            default_model="m1",
+            base_url="https://example.com/v1",
+        )
+        inst = Custom(customcompat_api_key="k")
+        inst.validate_settings()
+        out = inst.transform()
+        assert out.openai_model == "m1"
+        assert out.openai_base_url == "https://example.com/v1"
+        with pytest.raises(ValueError, match="API key"):
+            Custom().validate_settings()
 
 
 class TestCLISettings:
