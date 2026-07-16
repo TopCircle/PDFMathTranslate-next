@@ -1014,21 +1014,26 @@ class CLISettings(BaseModel):
         return value
 
     def validate_settings(self):
+        # Gradio empty textboxes are "" not None — treat blank as unset for optionals.
         self.clitranslator_program = _clean_string(self.clitranslator_program) or ""
-        self.clitranslator_script = _clean_string(self.clitranslator_script)
-        self.clitranslator_glossary = _clean_string(self.clitranslator_glossary)
-        self.clitranslator_proper_nouns = _clean_string(self.clitranslator_proper_nouns)
-        self.clitranslator_urls = _clean_string(self.clitranslator_urls)
-        self.clitranslator_extra_args = _clean_string(self.clitranslator_extra_args)
+        self.clitranslator_script = _clean_string(self.clitranslator_script) or None
+        self.clitranslator_glossary = _clean_string(self.clitranslator_glossary) or None
+        self.clitranslator_proper_nouns = (
+            _clean_string(self.clitranslator_proper_nouns) or None
+        )
+        self.clitranslator_urls = _clean_string(self.clitranslator_urls) or None
+        self.clitranslator_extra_args = (
+            _clean_string(self.clitranslator_extra_args) or None
+        )
         if self.clitranslator_timeout is not None and not isinstance(
             self.clitranslator_timeout, str
         ):
             self.clitranslator_timeout = str(self.clitranslator_timeout)
-        self.clitranslator_timeout = _clean_string(self.clitranslator_timeout)
-        self.clitranslator_postprocess_command = _clean_string(
-            self.clitranslator_postprocess_command
+        self.clitranslator_timeout = _clean_string(self.clitranslator_timeout) or None
+        self.clitranslator_postprocess_command = (
+            _clean_string(self.clitranslator_postprocess_command) or None
         )
-        self.clitranslator_command = _clean_string(self.clitranslator_command)
+        self.clitranslator_command = _clean_string(self.clitranslator_command) or None
 
         try:
             parts = self.build_command_parts()
@@ -1046,8 +1051,6 @@ class CLISettings(BaseModel):
         self.resolved_timeout()
 
         if self.clitranslator_postprocess_command is not None:
-            if not self.clitranslator_postprocess_command.strip():
-                raise ValueError("clitranslator_postprocess_command cannot be empty")
             try:
                 postprocess_parts = shlex.split(self.clitranslator_postprocess_command)
             except ValueError as e:

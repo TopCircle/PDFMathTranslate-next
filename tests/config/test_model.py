@@ -263,6 +263,28 @@ class TestCLISettings:
         assert parts.count("--url") == 2
         assert settings.resolved_timeout() == 120
 
+    def test_empty_optional_fields_from_gradio_are_unset(self):
+        """Gradio textboxes submit '' for blank optionals — must not reject save."""
+        settings = CLISettings(
+            clitranslator_program="python3",
+            clitranslator_script="/root/.config/pdf2zh/deeplx/deeplx.py",
+            clitranslator_glossary="",
+            clitranslator_proper_nouns="  ",
+            clitranslator_urls="",
+            clitranslator_extra_args="",
+            clitranslator_postprocess_command="",
+            clitranslator_command="",
+            clitranslator_timeout="120",
+        )
+        settings.validate_settings()
+        assert settings.clitranslator_postprocess_command is None
+        assert settings.clitranslator_command is None
+        assert settings.clitranslator_glossary is None
+        assert settings.build_command_parts() == [
+            "python3",
+            "/root/.config/pdf2zh/deeplx/deeplx.py",
+        ]
+
     def test_legacy_full_command_override(self):
         settings = CLISettings(
             clitranslator_program="python3",
