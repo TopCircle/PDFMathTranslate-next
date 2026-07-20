@@ -911,6 +911,8 @@ zh:
   '## Translation Options': '## 翻译选项'
   '### PDF Options': '### PDF 选项'
   '#### BabelDOC Advanced Options': '#### BabelDOC 高级选项'
+  '#### Header/Footer Filtering': '#### 页眉/页脚过滤'
+  '#### Quote Block Detection': '#### 引用块检测'
   Advanced Options: 高级选项
   All: 全部
   Auto Term Extraction: 自动术语提取
@@ -934,20 +936,25 @@ zh:
   Download automatically extracted glossary: 下载自动提取的词汇表
   Effective only when a page range is specified.: 仅在指定页面范围时有效。
   Enable auto term extraction: 启用自动术语提取
+  Enable post-layout optimization: 启用排版后优化
   Enhance compatibility (auto-enables skip_clean and disable_rich_text): 增强兼容性（自动启用 skip_clean 和 disable_rich_text）
   Figure/table protection threshold: 图表保护阈值
   File: 文件
   First: 首先
   First 5 pages: 前 5 页
+  Fix overlapping text after typesetting (experimental): 修复排版后文本重叠（实验性）
   Follow main translation engine: 跟随主翻译引擎
   Font pattern to identify formula text (regex, not recommended to change): 用于识别公式文本的字体模式（正则表达式，不建议更改）
+  Footer Height (pt): 页脚高度（点）
   Force split short lines into different paragraphs: 强制将短行拆分为不同段落
   Free translation service provided by [SiliconFlow](https://siliconflow.cn): 由 [SiliconFlow](https://siliconflow.cn) 提供的免费翻译服务
   Glossary File: 术语表文件
   Handle alternating line numbers and text paragraphs in documents with line numbers: 处理带行号文档中的交替行号与文本段落
+  Header Height (pt): 页眉高度（点）
   If not set or set to 0, QPS will be used as the number of workers: 如果未设置或设置为 0，QPS 将用作工作线程数量
   Ignore cache: 忽略缓存
   IoU threshold for identifying non-formula lines: 用于识别非公式行的 IoU 阈值
+  Left indent ratio threshold (indent / page width): 左缩进比例阈值（缩进 / 页宽）
   Link: 链接
   Maximum number of requests processed simultaneously: 同时处理的最大请求数
   Maximum pages per part (for auto-split translation, 0 means no limit): 每部分最大页数（用于自动拆分翻译，0 表示无限制）
@@ -966,17 +973,23 @@ zh:
   Protection threshold for figures and tables (lines within figures/tables will not be processed): 图表保护阈值（图表内文字将不被处理）
   Put translated pages first in dual mode: 在双语模式下优先显示翻译后的页面
   QPS (Queries Per Second): QPS（每秒查询数）
+  Quote Indent Threshold: 引用缩进阈值
+  Quote Narrow Threshold: 引用窄段阈值
+  Quote Right Margin Threshold: 引用右边距阈值
   RPC service for document layout analysis (optional): 用于文档布局分析的 RPC 服务（可选）
   RPM (Requests Per Minute): RPM（每分钟请求数）
   Range: 范围
   Rate Limit Mode: 速率限制模式
   Remove non-formula lines: 移除非公式行
   Remove non-formula lines within paragraph areas: 移除段落区域内的非公式行
+  Right margin ratio threshold (margin / page width): 右边距比例阈值（边距 / 页宽）
   Save Settings: 保存设置
   Saving configuration...: 正在保存配置...
   ? Select the rate limit mode that best suits your API provider, system will automatically convert the rate limiting values of RPM or Concurrent Requests to QPS and Pool Max Workers when you click the Translate button
   : 请选择最适合您 API 提供商的速率限制模式，点击翻译按钮后系统将自动将 RPM 或并发请求的限流值转换为 QPS 和池最大工作线程数
   Service: 服务
+  Skip Footer: 跳过页脚
+  Skip Header: 跳过页眉
   Skip clean (maybe improve compatibility): 跳过清理（可能提升兼容性）
   Skip formula offset calculation: 跳过公式偏移量计算
   Skip formula offset calculation during processing: 处理时跳过公式偏移计算
@@ -990,7 +1003,10 @@ zh:
   Term pool max workers: 术语池最大工作线程数
   Term rate limit mode: 术语速率限制模式
   Translate: 翻译
+  Translate figure text: 翻译图内文字
   Translate from: 从...翻译
+  ? Translate labels drawn inside figures (e.g. chart axes). Off by default — keeps Ancilla/Data labels in the source language. Independent of “Translate table text”.
+  : 翻译绘制在图内的标签（如坐标轴标注）。默认关闭，图内标签保持原文。与「翻译表格文本」相互独立。
   Translate table text (experimental): 翻译表格文本（实验性功能）
   Translate to: 翻译为
   Translation cancelled: 翻译已取消
@@ -1000,6 +1016,7 @@ zh:
   Use alternating pages for dual PDF: 使用交替页面进行双页 PDF 阅读
   Watermark mode: 水印模式
   Watermarked: 带水印
+  Width ratio threshold for Quote detection (paragraph width / page width): 引用检测的宽度比例阈值（段落宽 / 页宽）
   e.g. /no_think You are a professional zh-CN native translator who needs to fluently translate text into zh-CN.: 例如：/no_think 你是一名专业的简体中文母语译者，需要流利地将文本翻译为简体中文。
   e.g., 1,3,5-10: 例如：1、3、5-10
   save automatically extracted glossary: 保存自动提取的术语表
@@ -1011,6 +1028,8 @@ zh-TW:
   '## Translation Options': '## 翻譯選項'
   '### PDF Options': '### PDF 選項'
   '#### BabelDOC Advanced Options': '#### BabelDOC 進階選項'
+  '#### Header/Footer Filtering': '#### 頁首/頁尾過濾'
+  '#### Quote Block Detection': '#### 引用區塊偵測'
   Advanced Options: 進階選項
   All: 全部
   Auto Term Extraction: 自動術語擷取
@@ -1034,20 +1053,25 @@ zh-TW:
   Download automatically extracted glossary: 下載自動擷取的詞彙表
   Effective only when a page range is specified.: 僅在指定頁面範圍時有效。
   Enable auto term extraction: 啟用自動術語擷取
+  Enable post-layout optimization: 啟用排版後最佳化
   Enhance compatibility (auto-enables skip_clean and disable_rich_text): 增強相容性（自動啟用 skip_clean 和 disable_rich_text）
   Figure/table protection threshold: 圖表/表格保護閾值
   File: 檔案
   First: 第一
   First 5 pages: 前 5 頁
+  Fix overlapping text after typesetting (experimental): 修復排版後文字重疊（實驗性）
   Follow main translation engine: 遵循主要翻譯引擎
   Font pattern to identify formula text (regex, not recommended to change): 用於識別公式文字的字型模式（正規表示式，不建議更改）
+  Footer Height (pt): 頁尾高度（點）
   Force split short lines into different paragraphs: 強制將短行分割為不同段落
   Free translation service provided by [SiliconFlow](https://siliconflow.cn): 由 [SiliconFlow](https://siliconflow.cn) 提供的免費翻譯服務
   Glossary File: 詞彙表檔案
   Handle alternating line numbers and text paragraphs in documents with line numbers: 處理帶有行號的文件中的交替行號與文字段落
+  Header Height (pt): 頁首高度（點）
   If not set or set to 0, QPS will be used as the number of workers: 若未設定或設為 0，將使用 QPS 作為工作執行緒數量
   Ignore cache: 忽略快取
   IoU threshold for identifying non-formula lines: 用於識別非公式行的 IoU 閾值
+  Left indent ratio threshold (indent / page width): 左縮排比例閾值（縮排 / 頁寬）
   Link: 連結
   Maximum number of requests processed simultaneously: 同時處理的最大請求數量
   Maximum pages per part (for auto-split translation, 0 means no limit): 每個部分的最大頁數（用於自動分割翻譯，0 表示無限制）
@@ -1066,17 +1090,23 @@ zh-TW:
   Protection threshold for figures and tables (lines within figures/tables will not be processed): 圖表和表格的保護閾值（圖表/表格內的線條將不被處理）
   Put translated pages first in dual mode: 在雙重模式中將已翻譯頁面置於優先
   QPS (Queries Per Second): QPS（每秒查詢數）
+  Quote Indent Threshold: 引用縮排閾值
+  Quote Narrow Threshold: 引用窄段閾值
+  Quote Right Margin Threshold: 引用右邊距閾值
   RPC service for document layout analysis (optional): 用於文件版面分析的 RPC 服務（可選）
   RPM (Requests Per Minute): RPM（每分鐘請求數）
   Range: 範圍
   Rate Limit Mode: 速率限制模式
   Remove non-formula lines: 移除非公式行
   Remove non-formula lines within paragraph areas: 移除段落區域內的非公式行
+  Right margin ratio threshold (margin / page width): 右邊距比例閾值（邊距 / 頁寬）
   Save Settings: 儲存設定
   Saving configuration...: 正在儲存設定...
   ? Select the rate limit mode that best suits your API provider, system will automatically convert the rate limiting values of RPM or Concurrent Requests to QPS and Pool Max Workers when you click the Translate button
   : 請選擇最適合您 API 供應商的速率限制模式，點擊「轉換」按鈕後，系統會自動將 RPM 或併發請求的限流值轉換為 QPS 和池最大工作線程數。
   Service: 服務
+  Skip Footer: 略過頁尾
+  Skip Header: 略過頁首
   Skip clean (maybe improve compatibility): 跳過清理（可能提升相容性）
   Skip formula offset calculation: 跳過公式偏移計算
   Skip formula offset calculation during processing: 處理期間略過公式偏移計算
@@ -1090,7 +1120,10 @@ zh-TW:
   Term pool max workers: 詞彙池最大工作執行緒數
   Term rate limit mode: 詞彙速率限制模式
   Translate: 翻譯
+  Translate figure text: 翻譯圖內文字
   Translate from: 翻譯自
+  ? Translate labels drawn inside figures (e.g. chart axes). Off by default — keeps Ancilla/Data labels in the source language. Independent of “Translate table text”.
+  : 翻譯繪製在圖內的標籤（如座標軸標註）。預設關閉，圖內標籤保持原文。與「翻譯表格文字」相互獨立。
   Translate table text (experimental): 翻譯表格文字（實驗性功能）
   Translate to: 翻譯為
   Translation cancelled: 翻譯已取消
@@ -1100,6 +1133,7 @@ zh-TW:
   Use alternating pages for dual PDF: 使用交替頁面進行雙頁 PDF 處理
   Watermark mode: 浮水印模式
   Watermarked: 浮水印標記
+  Width ratio threshold for Quote detection (paragraph width / page width): 引用偵測的寬度比例閾值（段落寬 / 頁寬）
   e.g. /no_think You are a professional zh-CN native translator who needs to fluently translate text into zh-CN.: 例如：/no_think 你是一位專業的中文母語譯者，需要流暢地將文字翻譯成中文。
   e.g., 1,3,5-10: 例如：1,3,5-10
   save automatically extracted glossary: 儲存自動擷取的詞彙表
