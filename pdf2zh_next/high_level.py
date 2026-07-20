@@ -607,6 +607,16 @@ def create_babeldoc_config(settings: SettingsModel, file: Path) -> BabelDOCConfi
             "enable_post_layout_optimization; current BabelDOCConfig does not."
         )
 
+    if "translate_figure_text" in babeldoc_config_parameters:
+        babeldoc_extra_kwargs["translate_figure_text"] = (
+            settings.pdf.translate_figure_text
+        )
+    elif settings.pdf.translate_figure_text:
+        logger.warning(
+            "translate_figure_text requires a BabelDOC version that supports "
+            "this option; current BabelDOCConfig does not."
+        )
+
     # Quote block detection settings — guarded for forward-compatibility
     if "quote_narrow_threshold" in babeldoc_config_parameters:
         babeldoc_extra_kwargs.update(

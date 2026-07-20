@@ -176,6 +176,13 @@ class PDFSettings(BaseModel):
     translate_table_text: bool = Field(
         default=True, description="Translate table text (experimental)"
     )
+    translate_figure_text: bool = Field(
+        default=False,
+        description=(
+            "Translate in-figure labels (chart annotations). Off by default so "
+            "labels stay in the source language. Independent of table text."
+        ),
+    )
     skip_scanned_detection: bool = Field(
         default=False, description="Skip scanned detection"
     )

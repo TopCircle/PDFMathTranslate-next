@@ -487,7 +487,7 @@ def build_ui_inputs(*args):
             prompt, min_text_length, rpc_doclayout, custom_system_prompt_input, glossary_file,
             save_auto_extracted_glossary, enable_auto_term_extraction, primary_font_family, skip_clean,
             disable_rich_text_translate, enhance_compatibility, split_short_lines, short_line_split_factor,
-            translate_table_text, skip_scanned_detection, max_pages_per_part, formular_font_pattern,
+            translate_table_text, translate_figure_text, skip_scanned_detection, max_pages_per_part, formular_font_pattern,
             formular_char_pattern, ignore_cache, state, ocr_workaround, auto_enable_ocr_workaround,
             only_include_translated_page, merge_alternating_line_numbers, remove_non_formula_lines,
             non_formula_line_iou_threshold, figure_table_protection_threshold, skip_formula_offset_calculation,
@@ -530,6 +530,7 @@ def build_ui_inputs(*args):
         "split_short_lines",
         "short_line_split_factor",
         "translate_table_text",
+        "translate_figure_text",
         "skip_scanned_detection",
         "max_pages_per_part",
         "formular_font_pattern",
@@ -2180,6 +2181,7 @@ with gr.Blocks(
                         split_short_lines = _pdf_adv["split_short_lines"]
                         short_line_split_factor = _pdf_adv["short_line_split_factor"]
                         translate_table_text = _pdf_adv["translate_table_text"]
+                        translate_figure_text = _pdf_adv["translate_figure_text"]
                         skip_scanned_detection = _pdf_adv["skip_scanned_detection"]
                         ocr_workaround = _pdf_adv["ocr_workaround"]
                         auto_enable_ocr_workaround = _pdf_adv["auto_enable_ocr_workaround"]
@@ -2674,6 +2676,7 @@ with gr.Blocks(
             split_short_lines,
             short_line_split_factor,
             translate_table_text,
+            translate_figure_text,
             skip_scanned_detection,
             max_pages_per_part,
             formular_font_pattern,
@@ -2931,6 +2934,9 @@ with gr.Blocks(
                     )
                 )
                 updates.append(gr.update(value=fresh_settings.pdf.translate_table_text))
+                updates.append(
+                    gr.update(value=fresh_settings.pdf.translate_figure_text)
+                )
                 updates.append(
                     gr.update(value=fresh_settings.pdf.skip_scanned_detection)
                 )

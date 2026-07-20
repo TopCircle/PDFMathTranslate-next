@@ -60,6 +60,16 @@ def create_pdf_advanced_components(
         value=settings.pdf.translate_table_text,
         interactive=True,
     )
+    translate_figure_text = gr.Checkbox(
+        label=_("Translate figure text"),
+        info=_(
+            "Translate labels drawn inside figures (e.g. chart axes). "
+            "Off by default — keeps Ancilla/Data labels in the source language. "
+            "Independent of “Translate table text”."
+        ),
+        value=settings.pdf.translate_figure_text,
+        interactive=True,
+    )
     skip_scanned_detection = gr.Checkbox(
         label=_("Skip scanned detection"),
         value=settings.pdf.skip_scanned_detection,
@@ -230,6 +240,7 @@ def create_pdf_advanced_components(
         "split_short_lines": split_short_lines,
         "short_line_split_factor": short_line_split_factor,
         "translate_table_text": translate_table_text,
+        "translate_figure_text": translate_figure_text,
         "skip_scanned_detection": skip_scanned_detection,
         "ocr_workaround": ocr_workaround,
         "auto_enable_ocr_workaround": auto_enable_ocr_workaround,

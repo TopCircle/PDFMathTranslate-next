@@ -204,6 +204,7 @@ def build_translate_settings(
     split_short_lines = ui_inputs.get("split_short_lines")
     short_line_split_factor = ui_inputs.get("short_line_split_factor")
     translate_table_text = ui_inputs.get("translate_table_text")
+    translate_figure_text = ui_inputs.get("translate_figure_text")
     skip_scanned_detection = ui_inputs.get("skip_scanned_detection")
     ocr_workaround = ui_inputs.get("ocr_workaround")
     max_pages_per_part = ui_inputs.get("max_pages_per_part")
@@ -394,6 +395,8 @@ def build_translate_settings(
         translate_settings.pdf.short_line_split_factor = float(short_line_split_factor)
 
     translate_settings.pdf.translate_table_text = translate_table_text
+    if translate_figure_text is not None:
+        translate_settings.pdf.translate_figure_text = bool(translate_figure_text)
     translate_settings.pdf.skip_scanned_detection = skip_scanned_detection
     translate_settings.pdf.auto_enable_ocr_workaround = auto_enable_ocr_workaround
     translate_settings.pdf.only_include_translated_page = only_include_translated_page
