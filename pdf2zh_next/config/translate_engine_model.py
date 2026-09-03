@@ -874,7 +874,7 @@ class CLISettings(BaseModel):
     # registers --clitranslator-timeout twice and breaks `pdf2zh --version`.
     clitranslator_timeout: str | None = Field(
         default="120",
-        description="Command timeout in seconds (1-300, default 120)",
+        description="Command timeout in seconds (1-900, default 120)",
     )
     clitranslator_postprocess_command: str | None = Field(
         default=None,
@@ -946,8 +946,8 @@ class CLISettings(BaseModel):
             value = int(float(str(raw).strip()))
         except ValueError as e:
             raise ValueError("CLI timeout must be an integer (seconds)") from e
-        if value < 1 or value > 300:
-            raise ValueError("CLI timeout must be between 1 and 300 seconds")
+        if value < 1 or value > 900:
+            raise ValueError("CLI timeout must be between 1 and 900 seconds")
         return value
 
     def validate_settings(self):
