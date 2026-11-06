@@ -23,10 +23,13 @@ RUN uv pip install --system --no-cache -r pyproject.toml
 
 COPY . .
 
-# Calls for a random number to break the cahing of babeldoc upgrade
-# (https://stackoverflow.com/questions/35134713/disable-cache-for-specific-run-commands/58801213#58801213)
-ADD "https://www.random.org/cgi-bin/randbyte?nbytes=10&format=h" skipcache
+# BABELDOC_REF is one full lowercase commit. Reject other values before install.
+ARG BABELDOC_REF
+RUN if ! printf '%s' "$BABELDOC_REF" | grep -Eq '^[0-9a-f]{40}$'; then \
+      echo "BABELDOC_REF must match ^[0-9a-f]{40}$" >&2; \
+      exit 1; \
+    fi
 
-RUN uv pip install --system --no-cache . && uv pip install --system --no-cache --compile-bytecode -U "babeldoc @ git+https://github.com/TopCircle/BabelDOC.git@main" "pymupdf>=1.26.7" && babeldoc --version && babeldoc --warmup
+RUN uv pip install --system --no-cache . && uv pip install --system --no-cache --compile-bytecode -U "babeldoc @ git+https://github.com/TopCircle/BabelDOC.git@${BABELDOC_REF}" "pymupdf>=1.26.7" && babeldoc --version && babeldoc --warmup
 RUN pdf2zh --version
 CMD ["pdf2zh", "--gui"]
