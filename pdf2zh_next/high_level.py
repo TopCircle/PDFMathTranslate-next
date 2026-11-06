@@ -109,6 +109,15 @@ class SubprocessCrashError(TranslationError):
 logger = logging.getLogger(__name__)
 
 
+def attach_quality_to_event(event: dict) -> None:
+    """Copy document quality fields onto a finish event as plain values."""
+    result = event.get("translate_result")
+    event["quality_status"] = getattr(result, "quality_status", None)
+    event["quality_warning_count"] = getattr(result, "quality_warning_count", None)
+    report_path = getattr(result, "quality_report_path", None)
+    event["quality_report_path"] = str(report_path) if report_path else None
+
+
 def _translate_wrapper(
     settings: SettingsModel,
     file: Path,
@@ -269,6 +278,7 @@ def _translate_wrapper(
                             ]
 
                         event["token_usage"] = token_usage
+                        attach_quality_to_event(event)
                         pipe_progress_send.send(event)
                         break
                     pipe_progress_send.send(event)
@@ -777,6 +787,18 @@ async def do_translate_file_async(
                         logger.info(f"  Time Cost: {result.total_seconds:.2f}s")
                         logger.info(f"  Mono PDF: {result.mono_pdf_path or 'None'}")
                         logger.info(f"  Dual PDF: {result.dual_pdf_path or 'None'}")
+                        logger.info(
+                            "  Quality status: "
+                            f"{getattr(result, 'quality_status', None)}"
+                        )
+                        logger.info(
+                            "  Quality warning count: "
+                            f"{getattr(result, 'quality_warning_count', None)}"
+                        )
+                        logger.info(
+                            "  Quality report: "
+                            f"{getattr(result, 'quality_report_path', None)}"
+                        )
 
                         token_usage = event.get("token_usage", {})
                         if token_usage:

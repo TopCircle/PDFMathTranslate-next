@@ -2,8 +2,13 @@ import sys
 import tempfile
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-def _gui(monkeypatch):
+from gui_config_isolation import isolate_gui_config
+
+
+def _gui(monkeypatch, tmp_path):
+    isolate_gui_config(tmp_path)
     monkeypatch.setattr(sys, "argv", ["pytest"])
     import pdf2zh_next.gui as gui
 
@@ -22,8 +27,8 @@ def _empty_state():
     }
 
 
-def test_pdf_preview_allowed_paths_exclude_broad_filesystem_paths(monkeypatch):
-    gui = _gui(monkeypatch)
+def test_pdf_preview_allowed_paths_exclude_broad_filesystem_paths(monkeypatch, tmp_path):
+    gui = _gui(monkeypatch, tmp_path)
 
     allowed_paths = [Path(path).resolve() for path in gui.pdf_preview_allowed_paths]
     root_paths = {Path(path.anchor).resolve() for path in allowed_paths if path.anchor}
@@ -33,8 +38,8 @@ def test_pdf_preview_allowed_paths_exclude_broad_filesystem_paths(monkeypatch):
     assert not root_paths.intersection(allowed_paths)
 
 
-def test_pdf_preview_allowed_paths_keep_accepted_preview_locations(monkeypatch):
-    gui = _gui(monkeypatch)
+def test_pdf_preview_allowed_paths_keep_accepted_preview_locations(monkeypatch, tmp_path):
+    gui = _gui(monkeypatch, tmp_path)
 
     allowed_paths = [Path(path).resolve() for path in gui.pdf_preview_allowed_paths]
     expected_paths = {
@@ -46,8 +51,8 @@ def test_pdf_preview_allowed_paths_keep_accepted_preview_locations(monkeypatch):
     assert set(allowed_paths) == expected_paths
 
 
-def test_on_file_upload_empty_list_returns_all_declared_outputs(monkeypatch):
-    gui = _gui(monkeypatch)
+def test_on_file_upload_empty_list_returns_all_declared_outputs(monkeypatch, tmp_path):
+    gui = _gui(monkeypatch, tmp_path)
     state = _empty_state()
 
     result = gui.on_file_upload([], state)
@@ -61,8 +66,8 @@ def test_on_file_upload_empty_list_returns_all_declared_outputs(monkeypatch):
     assert result[2]["visible"] is False
 
 
-def test_on_file_upload_none_returns_all_declared_outputs(monkeypatch):
-    gui = _gui(monkeypatch)
+def test_on_file_upload_none_returns_all_declared_outputs(monkeypatch, tmp_path):
+    gui = _gui(monkeypatch, tmp_path)
     state = _empty_state()
 
     result = gui.on_file_upload(None, state)

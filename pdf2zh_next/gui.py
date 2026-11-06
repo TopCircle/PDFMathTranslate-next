@@ -34,6 +34,8 @@ from pdf2zh_next.const import DEFAULT_CONFIG_DIR
 from pdf2zh_next.const import DEFAULT_CONFIG_FILE
 from pdf2zh_next.high_level import TranslationError
 from pdf2zh_next.high_level import do_translate_async_stream
+from pdf2zh_next.quality import quality_message
+from pdf2zh_next.quality import summarize_batch_quality
 from pdf2zh_next.i18n import LANGUAGES
 from pdf2zh_next.i18n import gettext as _
 from pdf2zh_next.i18n import update_current_languages
@@ -622,6 +624,9 @@ async def _run_translation_task(
     dual_path = None
     glossary_path = None
     token_usage = None
+    quality_status = None
+    quality_warning_count = 0
+    quality_report_path = None
 
     try:
         settings.basic.input_files = set()
@@ -650,6 +655,11 @@ async def _run_translation_task(
                 dual_path = result.dual_pdf_path
                 glossary_path = result.auto_extracted_glossary_path
                 token_usage = event.get("token_usage", {})
+                quality_status = getattr(result, "quality_status", None)
+                raw_count = getattr(result, "quality_warning_count", None)
+                quality_warning_count = 0 if raw_count is None else int(raw_count)
+                report_path = getattr(result, "quality_report_path", None)
+                quality_report_path = str(report_path) if report_path else None
                 # progress(1.0, desc=_("Translation complete!")) # Let caller handle final completion
                 break
             elif event["type"] == "error":
@@ -676,6 +686,11 @@ async def _run_translation_task(
         logger.error(f"Error in _run_translation_task: {e}", exc_info=True)
         raise gr.Error(f"Translation failed: {e}") from e
 
+    state.setdefault("quality_by_file", {})[str(Path(file_path).resolve())] = {
+        "status": quality_status,
+        "warning_count": quality_warning_count,
+        "report_path": quality_report_path,
+    }
     return mono_path, dual_path, glossary_path, token_usage
 
 
@@ -729,6 +744,7 @@ async def translate_files(
     # Reset results for new translation run, but keep display_map for uploaded files
     state["results"] = {}
     state["file_order"] = []
+    state["quality_by_file"] = {}
 
     # Ensure display_map exists (it might have been populated by on_file_upload)
     if "display_map" not in state:
@@ -846,7 +862,22 @@ async def translate_files(
             # Await result
             mono_path, dual_path, glossary_path, token_usage = await task
 
-            # Store results
+            # Store results. Copy quality so clearing the bridge does not mutate it.
+            stored_quality = state.get("quality_by_file", {}).get(
+                str(file_path.resolve())
+            )
+            if stored_quality is None:
+                quality = {
+                    "status": None,
+                    "warning_count": 0,
+                    "report_path": None,
+                }
+            else:
+                quality = {
+                    "status": stored_quality.get("status"),
+                    "warning_count": int(stored_quality.get("warning_count") or 0),
+                    "report_path": stored_quality.get("report_path"),
+                }
             result_entry = {
                 "original_name": filename,
                 "original_path": str(file_path),
@@ -856,6 +887,7 @@ async def translate_files(
                 if glossary_path and glossary_path.exists()
                 else None,
                 "token_usage": token_usage,
+                "quality": quality,
             }
             state["results"][filename] = result_entry
             state["file_order"].append(filename)
@@ -911,6 +943,11 @@ async def translate_files(
                         res["glossary"],
                         arcname=f"glossary_{Path(res['glossary']).name}",
                     )
+                report_path = (res.get("quality") or {}).get("report_path")
+                if report_path:
+                    report_file = Path(report_path)
+                    if report_file.is_file():
+                        zipf.write(report_file, arcname=report_file.name)
 
         # Individual Zips
         has_mono, has_dual, has_glossary = False, False, False
@@ -935,10 +972,21 @@ async def translate_files(
                     )
                     has_glossary = True
 
-        progress(1.0, desc=_("All translations complete!"))
+        qualities = [
+            state["results"][name]["quality"] for name in state["file_order"]
+        ]
+        batch_status, warning_total = summarize_batch_quality(qualities)
+        batch_message = quality_message(batch_status, warning_count=warning_total)
+        logger.info(
+            "Batch token usage total=%s prompt=%s cache_hit=%s completion=%s",
+            all_token_usage["total"],
+            all_token_usage["prompt"],
+            all_token_usage["cache_hit_prompt"],
+            all_token_usage["completion"],
+        )
+        progress(1.0, desc=batch_message)
 
         # Final UI State
-        token_info = f"\n\n**Total Token Usage:** Total {all_token_usage['total']} (Prompt {all_token_usage['prompt']}, Cache Hit {all_token_usage['cache_hit_prompt']}, Completion {all_token_usage['completion']})"
 
         # Determine final preview (last file processed or first)
         last_file_key = state["file_order"][-1] if state["file_order"] else None
@@ -993,7 +1041,7 @@ async def translate_files(
             vis_mono,
             vis_dual,
             vis_glossary,
-            gr.update(value=f"{_('## Translated')}{token_info}"),  # Title updated
+            gr.update(value=batch_message),  # Title updated
             selector_update,
             selector_vis,
             gr.update(visible=True),
@@ -1036,6 +1084,7 @@ async def translate_files(
         raise gr.Error(f"Translation failed: {e}") from e
     finally:
         state["current_task"] = None
+        state["quality_by_file"] = {}
 
 
 def swap_languages(lang_from_value, lang_to_value):
