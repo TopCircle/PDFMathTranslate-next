@@ -829,6 +829,12 @@ class CLISettings(BaseModel):
         proper_nouns: /root/.config/pdf2zh/glossaries/proper_nouns.csv
         urls: (one URL per line)
         https://deeplx.example/translate
+        cache_files: (one local dependency per line; not an argument to the program)
+        /root/.config/pdf2zh/deeplx/normalize_extracted_en.py
+
+    ``cache_files`` and ``cache_revision`` affect only the outer translation
+    cache. A new implementation identity misses that cache. Do not delete the
+    existing cache or retranslate a whole book because of the miss.
 
     Advanced: set ``clitranslator_command`` to a full shell command string to
     override the decomposed fields (legacy configs still work).
@@ -891,6 +897,29 @@ class CLISettings(BaseModel):
             "'python3 /path/deeplx.py --glossary g.csv --url https://...'"
         ),
     )
+    # str | None only. A Union with another concrete type registers the CLI
+    # flag twice and breaks `pdf2zh --version`. These fields are cache
+    # identity, not arguments passed to the program.
+    clitranslator_cache_files: str | None = Field(
+        default=None,
+        description=(
+            "Local files that define this CLI implementation, one path per line "
+            "(normalizer, extra modules, postprocess script). Not passed to the "
+            "program. Example: "
+            "/root/.config/pdf2zh/deeplx/normalize_extracted_en.py. "
+            "A content change misses the outer cache; do not delete the old "
+            "cache or retranslate a whole book for that miss."
+        ),
+    )
+    clitranslator_cache_revision: str | None = Field(
+        default=None,
+        description=(
+            "Non-file implementation revision. Not passed to the program. "
+            "Set this when the program or postprocess command has no local "
+            "file to hash. Changing it misses the outer cache; keep the old "
+            "cache rows and do not retranslate a whole book for that miss."
+        ),
+    )
 
     def _url_list(self) -> list[str]:
         if not self.clitranslator_urls:
@@ -904,6 +933,7 @@ class CLISettings(BaseModel):
 
     def build_command_parts(self) -> list[str]:
         """Assemble argv for subprocess (legacy full command or decomposed fields)."""
+        # cache_files and cache_revision are not argv.
         # Legacy / advanced override
         if self.clitranslator_command and self.clitranslator_command.strip():
             return shlex.split(self.clitranslator_command)
@@ -971,6 +1001,12 @@ class CLISettings(BaseModel):
             _clean_string(self.clitranslator_postprocess_command) or None
         )
         self.clitranslator_command = _clean_string(self.clitranslator_command) or None
+        self.clitranslator_cache_files = (
+            _clean_string(self.clitranslator_cache_files) or None
+        )
+        self.clitranslator_cache_revision = (
+            _clean_string(self.clitranslator_cache_revision) or None
+        )
 
         try:
             parts = self.build_command_parts()

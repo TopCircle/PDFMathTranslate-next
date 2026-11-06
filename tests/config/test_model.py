@@ -327,12 +327,16 @@ class TestCLISettings:
             clitranslator_extra_args="",
             clitranslator_postprocess_command="",
             clitranslator_command="",
+            clitranslator_cache_files="",
+            clitranslator_cache_revision="  ",
             clitranslator_timeout="120",
         )
         settings.validate_settings()
         assert settings.clitranslator_postprocess_command is None
         assert settings.clitranslator_command is None
         assert settings.clitranslator_glossary is None
+        assert settings.clitranslator_cache_files is None
+        assert settings.clitranslator_cache_revision is None
         assert settings.build_command_parts() == [
             "python3",
             "/root/.config/pdf2zh/deeplx/deeplx.py",
@@ -379,6 +383,59 @@ class TestCLISettings:
             ValueError, match="Invalid clitranslator_postprocess_command"
         ):
             settings.validate_settings()
+
+    def test_cache_identity_fields_default_empty_and_are_not_argv(self):
+        settings = CLISettings(clitranslator_program="python3")
+        assert settings.clitranslator_cache_files is None
+        assert settings.clitranslator_cache_revision is None
+        description = CLISettings.model_fields["clitranslator_cache_files"].description
+        assert description is not None
+        assert "normalize_extracted_en.py" in description
+        assert "normalize_extracted_en.py" in (CLISettings.__doc__ or "")
+        assert "whole book" in (CLISettings.__doc__ or "")
+        loaded = CLISettings.model_validate(
+            {
+                "clitranslator_program": "python3",
+                "clitranslator_script": "/root/.config/pdf2zh/deeplx/deeplx.py",
+            }
+        )
+        loaded.validate_settings()
+        assert loaded.clitranslator_cache_files is None
+        assert loaded.build_command_parts() == [
+            "python3",
+            "/root/.config/pdf2zh/deeplx/deeplx.py",
+        ]
+        with_identity = CLISettings(
+            clitranslator_program="python3",
+            clitranslator_script="/root/.config/pdf2zh/deeplx/deeplx.py",
+            clitranslator_cache_files=(
+                "/root/.config/pdf2zh/deeplx/normalize_extracted_en.py\n"
+            ),
+            clitranslator_cache_revision="2026-11-06",
+        )
+        parts = with_identity.build_command_parts()
+        assert "normalize_extracted_en.py" not in " ".join(parts)
+        assert "2026-11-06" not in parts
+
+    def test_cache_identity_flags_register_once(self):
+        from pdf2zh_next.config.main import build_args_parser
+
+        parser, _field_types = build_args_parser()
+        option_strings: list[str] = []
+        for action in parser._actions:
+            option_strings.extend(action.option_strings)
+        assert option_strings.count("--clitranslator-cache-files") == 1
+        assert option_strings.count("--clitranslator-cache-revision") == 1
+        args = parser.parse_args(
+            [
+                "--clitranslator-cache-files",
+                "/root/.config/pdf2zh/deeplx/normalize_extracted_en.py",
+                "--clitranslator-cache-revision",
+                "2026-11-06",
+            ]
+        )
+        assert args.clitranslator_cache_files.endswith("normalize_extracted_en.py")
+        assert args.clitranslator_cache_revision == "2026-11-06"
 
     def test_urls_split_by_comma_or_newline(self):
         settings = CLISettings(

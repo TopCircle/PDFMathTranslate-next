@@ -63,3 +63,17 @@ def test_collect_paths_from_equals_form_flag():
         "/data/g.csv",
         "/data/p.csv",
     ]
+
+
+def test_cache_identity_inputs_are_not_glossary_paths(tmp_path: Path):
+    """cache_files / revision stay out of argv and out of term fingerprints."""
+    dependency = tmp_path / "normalize_extracted_en.py"
+    dependency.write_text("norm\n", encoding="utf-8")
+    settings = CLISettings(
+        clitranslator_program="python3",
+        clitranslator_cache_files=f"{dependency}\n",
+        clitranslator_cache_revision="template",
+    )
+    parts = settings.build_command_parts()
+    assert parts == ["python3"]
+    assert _collect_cache_file_paths(settings, parts) == []

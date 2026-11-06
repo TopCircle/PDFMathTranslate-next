@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import hashlib
 import logging
 import os
@@ -10,6 +12,12 @@ from pdf2zh_next.config.model import SettingsModel
 from pdf2zh_next.config.translate_engine_model import CLISettings
 from pdf2zh_next.translator.base_rate_limiter import BaseRateLimiter
 from pdf2zh_next.translator.base_translator import BaseTranslator
+from pdf2zh_next.translator.translator_impl.cli_cache_identity import (
+    CLITRANSLATOR_IMPL_SCHEMA,
+)
+from pdf2zh_next.translator.translator_impl.cli_cache_identity import (
+    implementation_fingerprint,
+)
 from tenacity import before_sleep_log
 from tenacity import retry
 from tenacity import retry_if_exception_type
@@ -20,6 +28,96 @@ logger = logging.getLogger(__name__)
 
 # Flags whose following argv value is a local file that affects translation.
 _CACHE_FILE_FLAGS = ("--glossary", "--proper-nouns")
+
+# One hint per process. Later unidentified instances stay silent.
+_IMPL_IDENTITY_WARNED = False
+
+
+def _nonempty(value: str | None) -> str:
+    return (value or "").strip()
+
+
+def _cache_file_lines(cli_settings: CLISettings) -> list[str]:
+    raw = _nonempty(cli_settings.clitranslator_cache_files)
+    if not raw:
+        return []
+    return [line.strip() for line in raw.splitlines() if line.strip()]
+
+
+def _identity_requires_explicit_declaration(cli_settings: CLISettings) -> bool:
+    """Legacy commands, bare programs, and postprocess commands are not files.
+
+    A decomposed ``clitranslator_script`` is the executing file. Anything else
+    needs ``clitranslator_cache_files`` or ``clitranslator_cache_revision``.
+    Argv strings are never treated as those files.
+    """
+    if _nonempty(cli_settings.clitranslator_command):
+        return True
+    if _nonempty(cli_settings.clitranslator_postprocess_command):
+        return True
+    return not _nonempty(cli_settings.clitranslator_script)
+
+
+def _explicit_identity_declared(cli_settings: CLISettings) -> bool:
+    return bool(_cache_file_lines(cli_settings)) or bool(
+        _nonempty(cli_settings.clitranslator_cache_revision)
+    )
+
+
+def _implementation_paths(cli_settings: CLISettings) -> list[Path]:
+    """Script that will run, plus paths the user listed. Not argv guesses."""
+    paths: list[Path] = []
+    if not _nonempty(cli_settings.clitranslator_command):
+        script = _nonempty(cli_settings.clitranslator_script)
+        if script:
+            paths.append(Path(script))
+    paths.extend(Path(line) for line in _cache_file_lines(cli_settings))
+    return paths
+
+
+def _warn_impl_identity_once() -> None:
+    global _IMPL_IDENTITY_WARNED
+    if _IMPL_IDENTITY_WARNED:
+        return
+    _IMPL_IDENTITY_WARNED = True
+    logger.warning(
+        "CLITranslator cache disabled for this instance: implementation "
+        "identity is not fixed by a decomposed script, clitranslator_cache_files, "
+        "or clitranslator_cache_revision. Refusing to guess files from argv. "
+        "The existing cache was not deleted; do not retranslate a whole book "
+        "to compensate for this miss."
+    )
+
+
+def _install_implementation_cache(
+    translator: CLITranslatorTranslator, cli_settings: CLISettings
+) -> None:
+    """Snapshot implementation identity onto this instance's cache key.
+
+    Unknown identity disables read and write for this instance only.
+    """
+    if _identity_requires_explicit_declaration(
+        cli_settings
+    ) and not _explicit_identity_declared(cli_settings):
+        translator.ignore_cache = True
+        _warn_impl_identity_once()
+        return
+
+    fingerprint = implementation_fingerprint(
+        _implementation_paths(cli_settings),
+        revision=_nonempty(cli_settings.clitranslator_cache_revision),
+    )
+    translator.add_cache_impact_parameters(
+        "clitranslator_impl_schema", CLITRANSLATOR_IMPL_SCHEMA
+    )
+    translator.add_cache_impact_parameters(
+        "clitranslator_impl_fingerprint", fingerprint
+    )
+    logger.debug(
+        "CLITranslator implementation snapshot schema=%s fingerprint=%s",
+        CLITRANSLATOR_IMPL_SCHEMA,
+        fingerprint,
+    )
 
 
 def _file_content_fingerprint(path: str) -> str:
@@ -92,6 +190,7 @@ class CLITranslatorTranslator(BaseTranslator):
         glossary: /root/.config/pdf2zh/glossaries/sextips.csv
         proper_nouns: /root/.config/pdf2zh/glossaries/proper_nouns.csv
         urls: one DeepLX endpoint per line
+        cache_files: /root/.config/pdf2zh/deeplx/normalize_extracted_en.py
     """
 
     name = "clitranslator"
@@ -134,8 +233,9 @@ class CLITranslatorTranslator(BaseTranslator):
                 raise ValueError("clitranslator_postprocess_command cannot be empty")
             self.postprocess_command = postprocess_parts
 
-        # Cache distinguishes command line + timeout + glossary file *contents*
-        # (path-only keys miss updates when CSV content changes in place).
+        # Command, timeout, and glossary contents stay in the key. The
+        # implementation snapshot is taken once here and is not refreshed
+        # if the script changes while this instance is alive.
         self.add_cache_impact_parameters("clitranslator_command", self.command_string)
         self.add_cache_impact_parameters("clitranslator_timeout", self.timeout)
         if self.postprocess_command_string:
@@ -146,6 +246,7 @@ class CLITranslatorTranslator(BaseTranslator):
             fp = _file_content_fingerprint(path)
             self.add_cache_impact_parameters(f"clitranslator_file:{path}", fp)
             logger.debug("CLITranslator cache file fingerprint %s -> %s", path, fp)
+        _install_implementation_cache(self, cli_settings)
 
         # Best-effort availability check (does not assume --version support).
         self._test_command(self.command, label="CLI")
