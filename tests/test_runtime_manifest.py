@@ -26,7 +26,7 @@ COMPOSE_CMD = (
     "/Users/yun/Nextcloud/Project/PDFMathTranslate-next/docker-compose.yml "
     "build pdfmt-next"
 )
-EXPECTED_BABELDOC_SHA = "98c63369382c72a738c289b702ebd46b956569a2"
+EXPECTED_BABELDOC_SHA = "abf0390bf98efe9c08057b3c1cfca3bb4aa199e8"
 FIXTURE_KEY = "fixture-test-key-DO-NOT-LEAK"
 FIXTURE_ENDPOINT = "https://fixture.invalid/translate"
 MOUNT_MARKERS = ("/app/BabelDOC", "/app/PDFMathTranslate-next")
