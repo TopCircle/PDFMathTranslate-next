@@ -832,10 +832,12 @@ class CLISettings(BaseModel):
         cache_files: (other local dependencies, one per line; not an argument)
         /root/.config/pdf2zh/deeplx/normalize_extracted_en.py
 
-    A decomposed DeepLX script fingerprints ``normalize_extracted_en.py``
-    without ``cache_files``: the file beside the script, or
-    ``~/.config/pdf2zh/deeplx/normalize_extracted_en.py`` when the sibling
-    is absent. ``cache_files`` and ``cache_revision`` affect only the outer
+    A decomposed DeepLX script fingerprints the normalizer it would load,
+    without ``cache_files``: ``normalize_extracted_en.py`` beside the script
+    path as given (symlinks stay in that path), or
+    ``~/.config/pdf2zh/deeplx/normalize_extracted_en.py`` when that sibling
+    is missing or fails to load. ``cache_files`` and ``cache_revision`` affect
+    only the outer
     translation cache. A new implementation identity misses that cache. Do
     not delete the existing cache or retranslate a whole book because of
     the miss.
@@ -909,9 +911,10 @@ class CLISettings(BaseModel):
         description=(
             "Other local files that define this CLI implementation, one path "
             "per line. Not passed to the program. A DeepLX script already "
-            "includes normalize_extracted_en.py beside the script, or "
-            "~/.config/pdf2zh/deeplx/normalize_extracted_en.py when that "
-            "sibling is absent. Example: "
+            "includes normalize_extracted_en.py beside the script path as "
+            "given, or ~/.config/pdf2zh/deeplx/normalize_extracted_en.py when "
+            "that sibling is missing or fails to load. Symlinks are not "
+            "resolved before the sibling is chosen. Example: "
             "/root/.config/pdf2zh/deeplx/normalize_extracted_en.py. "
             "A content change misses the outer cache; do not delete the old "
             "cache or retranslate a whole book for that miss."

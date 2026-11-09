@@ -75,32 +75,65 @@ def _script_mentions_deeplx_normalizer(script: Path) -> bool:
     return _DEEPLX_NORMALIZER_NAME in text
 
 
-def _deeplx_normalizer_path(script: Path) -> Path | None:
-    """File DeepLX would load for this script. Other scripts return None.
+def _executed_script_path(script: Path) -> Path:
+    """Directory DeepLX uses is ``dirname(abspath(__file__))``.
 
-    Sibling wins, matching the adapter. The home fallback is used only when
-    that sibling is absent. This does not read argv.
+    ``abspath`` keeps a symlink in the path and does not expand ``~``.
+    ``resolve`` would jump to the target and select a different sibling.
+    """
+    return Path(os.path.abspath(str(script)))
+
+
+def _normalizer_exports_callable(path: Path) -> bool:
+    """Same success rule as DeepLX: the module loads and exports a callable."""
+    import importlib.util
+
+    module_name = "pdf2zh_normalizer_probe_" + hashlib.sha256(
+        os.path.abspath(str(path)).encode("utf-8", errors="replace")
+    ).hexdigest()[:16]
+    try:
+        spec = importlib.util.spec_from_file_location(module_name, path)
+        if spec is None or spec.loader is None:
+            return False
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+    except Exception:
+        logger.debug("DeepLX normalizer did not load: %s", path, exc_info=True)
+        return False
+    exported = getattr(module, "normalize_for_mt", None) or getattr(
+        module, "normalize_extracted_en", None
+    )
+    return callable(exported)
+
+
+def _deeplx_normalizer_path(script: Path) -> Path | None:
+    """File DeepLX would actually load, or None when it uses the built-in.
+
+    The sibling is next to the script path as configured. A candidate that
+    exists but fails to load is skipped, then the home fallback is tried.
+    Other scripts return None. Argv is not inspected.
     """
     if not _script_mentions_deeplx_normalizer(script):
         return None
-    try:
-        resolved = script.expanduser().resolve(strict=False)
-    except OSError:
-        return None
-    sibling = resolved.parent / _DEEPLX_NORMALIZER_NAME
-    if sibling.is_file():
-        return sibling
-    home = Path.home() / ".config" / "pdf2zh" / "deeplx" / _DEEPLX_NORMALIZER_NAME
-    if home.is_file():
-        return home
+    executed = _executed_script_path(script)
+    candidates = (
+        executed.parent / _DEEPLX_NORMALIZER_NAME,
+        Path.home() / ".config" / "pdf2zh" / "deeplx" / _DEEPLX_NORMALIZER_NAME,
+    )
+    for candidate in candidates:
+        if not candidate.is_file():
+            continue
+        if _normalizer_exports_callable(candidate):
+            return candidate
     return None
 
 
 def _implementation_paths(cli_settings: CLISettings) -> list[Path]:
-    """Script that will run, its DeepLX normalizer, and paths the user listed.
+    """Script that will run, the normalizer DeepLX would load, and listed paths.
 
-    The normalizer is included only when this script is the DeepLX adapter
-    and the file it would load exists. Argv strings are not paths.
+    The normalizer follows the adapter: the executed script directory, then
+    the home fallback when that sibling is missing or does not load. Argv
+    strings are not paths.
     """
     paths: list[Path] = []
     if not _nonempty(cli_settings.clitranslator_command):
@@ -232,9 +265,11 @@ class CLITranslatorTranslator(BaseTranslator):
         urls: one DeepLX endpoint per line
         cache_files: other local dependencies, one per line
 
-    A decomposed DeepLX script already fingerprints ``normalize_extracted_en.py``:
-    the copy beside the script, or ``~/.config/pdf2zh/deeplx/`` when that
-    sibling is absent. Listing the same file in ``cache_files`` is optional.
+    A decomposed DeepLX script fingerprints the normalizer the adapter loads:
+    ``normalize_extracted_en.py`` beside the script path as given, without
+    resolving symlinks, or ``~/.config/pdf2zh/deeplx/`` when that sibling is
+    missing or fails to load. Listing the same file in ``cache_files`` is
+    optional.
     """
 
     name = "clitranslator"
