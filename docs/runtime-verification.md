@@ -4,7 +4,7 @@ This release pins the BabelDOC commit installed by the image build and records t
 
 ## Expected BabelDOC commit
 
-`cdace37c4197bef625376f5fdf6c4a2c3efe8c31` is the `impl/r1-2026-11-06` head, package version `0.6.4.102`. That commit keeps the BabelDOC lock on PyMuPDF 1.x. The image install uses this full SHA, and the Dockerfile requires `pymupdf>=1.26.7,<2`.
+`021d0e7f3e4974efdd5e7f46feadbb5aafba130e` is the image install on `impl/r1-2026-11-06`, package version `0.6.4.103`. That commit keeps the BabelDOC lock on PyMuPDF 1.x. An incomplete paragraph is marked and the PDF is still written. The image install uses this full SHA, and the Dockerfile requires `pymupdf>=1.26.7,<2`.
 
 Do not build with the previous command that omits `BABELDOC_REF`. Compose rejects an unset or empty value. The Dockerfile rejects any value that is not 40 lowercase hex characters, including `main`, a short SHA, a non-hex string, and an uppercase SHA.
 
@@ -24,7 +24,7 @@ SHA-256: `2381bc95bdd81584855d06f904ad932bb4c99d26a57d9da35e920764b558251a`
 BABELDOC_REF=<40位小写SHA> docker compose -f /Users/yun/Nextcloud/Project/PDFMathTranslate-next/docker-compose.yml build pdfmt-next
 ```
 
-The release command uses `BABELDOC_REF=cdace37c4197bef625376f5fdf6c4a2c3efe8c31`.
+The release command uses `BABELDOC_REF=021d0e7f3e4974efdd5e7f46feadbb5aafba130e`.
 
 Before building, confirm `BABELDOC_REF` is this full SHA. The Dockerfile accepts any 40 lowercase hex characters, so an older full SHA such as `98c63369382c72a738c289b702ebd46b956569a2` still passes the check and skips the PyMuPDF 1.x pin.
 
