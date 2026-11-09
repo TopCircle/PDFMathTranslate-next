@@ -31,7 +31,7 @@ from pdf2zh_next.translator.cache import init_test_db
 from pdf2zh_next.translator.translator_impl.bing import BingTranslator
 from pdf2zh_next.translator.translator_impl.clitranslator import CLITranslatorTranslator
 
-DEEPLX_SHA256 = "9d910f3f603ccf984ab2d8120a2def2724c070787296eade22349de49d6086a9"
+DEEPLX_SHA256 = "172063fa62487a2c35a88ddd47f12d47306e7d300c042daea79ea2ea7434b990"
 
 
 def _external_deeplx_dir() -> Path | None:
