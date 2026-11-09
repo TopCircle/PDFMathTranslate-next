@@ -84,56 +84,39 @@ def _executed_script_path(script: Path) -> Path:
     return Path(os.path.abspath(str(script)))
 
 
-def _normalizer_exports_callable(path: Path) -> bool:
-    """Same success rule as DeepLX: the module loads and exports a callable."""
-    import importlib.util
+def _deeplx_normalizer_candidates(script: Path) -> list[Path]:
+    """Normalizer files the CLI process might load.
 
-    module_name = "pdf2zh_normalizer_probe_" + hashlib.sha256(
-        os.path.abspath(str(path)).encode("utf-8", errors="replace")
-    ).hexdigest()[:16]
-    try:
-        spec = importlib.util.spec_from_file_location(module_name, path)
-        if spec is None or spec.loader is None:
-            return False
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-    except Exception:
-        logger.debug("DeepLX normalizer did not load: %s", path, exc_info=True)
-        return False
-    exported = getattr(module, "normalize_for_mt", None) or getattr(
-        module, "normalize_extracted_en", None
-    )
-    return callable(exported)
-
-
-def _deeplx_normalizer_path(script: Path) -> Path | None:
-    """File DeepLX would actually load, or None when it uses the built-in.
-
-    The sibling is next to the script path as configured. A candidate that
-    exists but fails to load is skipped, then the home fallback is tried.
-    Other scripts return None. Argv is not inspected.
+    DeepLX tries the sibling of the executed script, then the home file if
+    that load fails. The child interpreter can import modules this process
+    cannot, so a failed import here is not evidence the child will skip the
+    file. Every candidate that exists is hashed and none is imported.
+    Other scripts return no candidates. Argv is not inspected.
     """
     if not _script_mentions_deeplx_normalizer(script):
-        return None
+        return []
     executed = _executed_script_path(script)
     candidates = (
         executed.parent / _DEEPLX_NORMALIZER_NAME,
         Path.home() / ".config" / "pdf2zh" / "deeplx" / _DEEPLX_NORMALIZER_NAME,
     )
+    found: list[Path] = []
     for candidate in candidates:
-        if not candidate.is_file():
+        try:
+            exists = candidate.is_file()
+        except OSError:
             continue
-        if _normalizer_exports_callable(candidate):
-            return candidate
-    return None
+        if exists:
+            found.append(candidate)
+    return found
 
 
 def _implementation_paths(cli_settings: CLISettings) -> list[Path]:
-    """Script that will run, the normalizer DeepLX would load, and listed paths.
+    """Script that will run, normalizer candidates, and listed paths.
 
-    The normalizer follows the adapter: the executed script directory, then
-    the home fallback when that sibling is missing or does not load. Argv
-    strings are not paths.
+    Both the executed-script sibling and the home file are included when
+    they exist. The child may load only one of them. Argv strings are not
+    paths, and candidate files are not imported.
     """
     paths: list[Path] = []
     if not _nonempty(cli_settings.clitranslator_command):
@@ -141,9 +124,7 @@ def _implementation_paths(cli_settings: CLISettings) -> list[Path]:
         if script:
             script_path = Path(script)
             paths.append(script_path)
-            normalizer = _deeplx_normalizer_path(script_path)
-            if normalizer is not None:
-                paths.append(normalizer)
+            paths.extend(_deeplx_normalizer_candidates(script_path))
     paths.extend(Path(line) for line in _cache_file_lines(cli_settings))
     return paths
 
@@ -265,11 +246,11 @@ class CLITranslatorTranslator(BaseTranslator):
         urls: one DeepLX endpoint per line
         cache_files: other local dependencies, one per line
 
-    A decomposed DeepLX script fingerprints the normalizer the adapter loads:
-    ``normalize_extracted_en.py`` beside the script path as given, without
-    resolving symlinks, or ``~/.config/pdf2zh/deeplx/`` when that sibling is
-    missing or fails to load. Listing the same file in ``cache_files`` is
-    optional.
+    A decomposed DeepLX script fingerprints existing normalizer candidates
+    without importing them: ``normalize_extracted_en.py`` beside the script
+    path as given, without resolving symlinks, and the file under
+    ``~/.config/pdf2zh/deeplx/`` when it exists. The CLI process may load
+    only one of them. Listing the same file in ``cache_files`` is optional.
     """
 
     name = "clitranslator"

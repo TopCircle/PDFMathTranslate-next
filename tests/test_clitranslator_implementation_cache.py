@@ -14,6 +14,7 @@ import logging
 import os
 import shlex
 import sqlite3
+import subprocess
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -778,6 +779,9 @@ def test_two_cache_layers_do_not_promote_old_cleaned_result(
     module = _load_deeplx_copy(script)
     assert module.INNER_CACHE_SCHEMA == "2"
     assert module.ADAPTER_IMPLEMENTATION_FP == DEEPLX_SHA256
+    from pdf2zh_next.translator.translator_impl import clitranslator as cli_mod
+
+    monkeypatch.setattr(cli_mod.Path, "home", lambda: tmp_path / "empty-home")
     normalized = module.rewrite_bold_glossary_labels(
         module.fix_pdf_spans(
             module.normalize_for_mt(module.clean_unicode(LAYER_SOURCE))
@@ -934,7 +938,7 @@ def _env_output_script(counter: Path, env_name: str, note: str = "") -> str:
 def test_undeclared_deeplx_normalizer_edit_misses_outer_cache(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
-    """Sibling normalize_extracted_en.py is part of the key even when cache_files is unset."""
+    """Existing normalizer candidates stay in the key when cache_files is unset."""
     from pdf2zh_next.translator.translator_impl.cli_cache_identity import (
         implementation_fingerprint,
     )
@@ -986,7 +990,9 @@ def test_undeclared_deeplx_normalizer_edit_misses_outer_cache(
     assert edited.translate_cache_call_count == 0
     assert counter.read_text(encoding="utf-8") == "2"
     assert _params(edited)["clitranslator_impl_fingerprint"] == (
-        implementation_fingerprint([script, normalizer], revision="")
+        implementation_fingerprint(
+            [script, normalizer, home_normalizer], revision=""
+        )
     )
 
 
@@ -1153,14 +1159,16 @@ def test_symlink_script_tracks_normalizer_beside_the_executed_path(
     )
 
 
-def test_failed_sibling_normalizer_falls_back_to_home(
+def test_normalizer_candidates_are_hashed_without_running_them(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
+    """Both existing candidates are hashed. Top-level code stays unexecuted."""
     from pdf2zh_next.translator.translator_impl.cli_cache_identity import (
         implementation_fingerprint,
     )
     from pdf2zh_next.translator.translator_impl import clitranslator as cli_mod
 
+    marker = tmp_path / "parent-executed"
     counter = tmp_path / "calls"
     script = tmp_path / "adapter" / "deeplx.py"
     script.parent.mkdir()
@@ -1174,13 +1182,22 @@ def test_failed_sibling_normalizer_falls_back_to_home(
     )
     sibling = script.parent / "normalize_extracted_en.py"
     sibling.write_text(
-        "raise RuntimeError('normalize_extracted_en failed to load')\n",
+        "import pathlib\n"
+        "import sys\n"
+        f"pathlib.Path({str(marker)!r}).write_text('sibling', encoding='utf-8')\n"
+        "sys.exit(86)\n",
         encoding="utf-8",
     )
     home = tmp_path / "home"
     home_normalizer = home / ".config" / "pdf2zh" / "deeplx" / "normalize_extracted_en.py"
     home_normalizer.parent.mkdir(parents=True)
-    home_normalizer.write_text(_loadable_normalizer("home-v1"), encoding="utf-8")
+    home_normalizer.write_text(
+        "import pathlib\n"
+        "import sys\n"
+        f"pathlib.Path({str(marker)!r}).write_text('home', encoding='utf-8')\n"
+        "sys.exit(87)\n",
+        encoding="utf-8",
+    )
     monkeypatch.setattr(cli_mod.Path, "home", lambda: home)
     monkeypatch.setenv("PDF2ZH_TEST_CLI_OUTPUT", "第一次译文")
 
@@ -1193,26 +1210,123 @@ def test_failed_sibling_normalizer_falls_back_to_home(
             )
         )
 
-    assert make().translate("fallback-source") == "第一次译文"
-    assert make().translate("fallback-source") == "第一次译文"
+    assert make().translate("no-exec-source") == "第一次译文"
+    assert not marker.exists()
+    assert make().translate("no-exec-source") == "第一次译文"
     assert counter.read_text(encoding="utf-8") == "1"
+    assert not marker.exists()
 
     sibling.write_text(
-        "raise RuntimeError('still broken')\n",
+        "import pathlib\n"
+        "import sys\n"
+        f"pathlib.Path({str(marker)!r}).write_text('sibling-2', encoding='utf-8')\n"
+        "sys.exit(86)\n",
         encoding="utf-8",
     )
-    monkeypatch.setenv("PDF2ZH_TEST_CLI_OUTPUT", "不应使用")
-    still = make()
-    assert still.translate("fallback-source") == "第一次译文"
-    assert still.translate_cache_call_count == 1
+    monkeypatch.setenv("PDF2ZH_TEST_CLI_OUTPUT", "第二次译文")
+    missed_sibling = make()
+    assert missed_sibling.translate("no-exec-source") == "第二次译文"
+    assert missed_sibling.translate_cache_call_count == 0
+    assert not marker.exists()
+
+    home_normalizer.write_text(
+        "import pathlib\n"
+        "import sys\n"
+        f"pathlib.Path({str(marker)!r}).write_text('home-2', encoding='utf-8')\n"
+        "sys.exit(87)\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("PDF2ZH_TEST_CLI_OUTPUT", "第三次译文")
+    missed_home = make()
+    assert missed_home.translate("no-exec-source") == "第三次译文"
+    assert missed_home.translate_cache_call_count == 0
+    assert counter.read_text(encoding="utf-8") == "3"
+    assert not marker.exists()
+    assert _params(missed_home)["clitranslator_impl_fingerprint"] == (
+        implementation_fingerprint([script, sibling, home_normalizer], revision="")
+    )
+
+
+def test_child_import_environment_still_fingerprints_the_normalizer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """A sibling import can fail here and succeed in the CLI process."""
+    from pdf2zh_next.translator.translator_impl.cli_cache_identity import (
+        implementation_fingerprint,
+    )
+    from pdf2zh_next.translator.translator_impl import clitranslator as cli_mod
+
+    adapter = tmp_path / "adapter"
+    adapter.mkdir()
+    sidecar = adapter / "pdf2zh_norm_sidecar_for_test.py"
+    sidecar.write_text("TOKEN = 'child-ok'\n", encoding="utf-8")
+    normalizer = adapter / "normalize_extracted_en.py"
+    normalizer.write_text(
+        "import pdf2zh_norm_sidecar_for_test as sidecar\n"
+        "def normalize_for_mt(text):\n"
+        "    return sidecar.TOKEN + ':' + text\n",
+        encoding="utf-8",
+    )
+    spec = importlib.util.spec_from_file_location(
+        "pdf2zh_parent_probe_normalizer", normalizer
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    with pytest.raises(ImportError):
+        spec.loader.exec_module(module)
+
+    child = adapter / "child_load.py"
+    child.write_text(
+        "import normalize_extracted_en\n"
+        "print(normalize_extracted_en.normalize_for_mt('x'), end='')\n",
+        encoding="utf-8",
+    )
+    completed = subprocess.run(
+        [sys.executable, str(child)],
+        check=True,
+        capture_output=True,
+        text=True,
+        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+    )
+    assert completed.stdout == "child-ok:x"
+
+    counter = tmp_path / "calls"
+    script = adapter / "deeplx.py"
+    script.write_text(
+        _env_output_script(
+            counter,
+            "PDF2ZH_TEST_CLI_OUTPUT",
+            note="# loads normalize_extracted_en.py",
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(cli_mod.Path, "home", lambda: tmp_path / "empty-home")
+    monkeypatch.setenv("PDF2ZH_TEST_CLI_OUTPUT", "第一次译文")
+
+    def make():
+        return _translator(
+            CLISettings(
+                clitranslator_program=sys.executable,
+                clitranslator_script=str(script),
+                clitranslator_timeout="30",
+            )
+        )
+
+    assert make().translate("cross-process-source") == "第一次译文"
+    assert make().translate("cross-process-source") == "第一次译文"
     assert counter.read_text(encoding="utf-8") == "1"
 
-    home_normalizer.write_text(_loadable_normalizer("home-v2"), encoding="utf-8")
+    normalizer.write_text(
+        "import pdf2zh_norm_sidecar_for_test as sidecar\n"
+        "def normalize_for_mt(text):\n"
+        "    return 'edited:' + text\n",
+        encoding="utf-8",
+    )
     monkeypatch.setenv("PDF2ZH_TEST_CLI_OUTPUT", "第二次译文")
     missed = make()
-    assert missed.translate("fallback-source") == "第二次译文"
+    assert missed.translate("cross-process-source") == "第二次译文"
     assert missed.translate_cache_call_count == 0
     assert counter.read_text(encoding="utf-8") == "2"
     assert _params(missed)["clitranslator_impl_fingerprint"] == (
-        implementation_fingerprint([script, home_normalizer], revision="")
+        implementation_fingerprint([script, normalizer], revision="")
     )
