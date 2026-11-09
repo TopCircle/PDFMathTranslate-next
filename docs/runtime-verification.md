@@ -4,7 +4,7 @@ This release pins the BabelDOC commit installed by the image build and records t
 
 ## Expected BabelDOC commit
 
-`abf0390bf98efe9c08057b3c1cfca3bb4aa199e8` is the local `impl/r1-2026-11-06` head. That commit keeps the BabelDOC lock on PyMuPDF 1.x. It is local and not pushed. A real image build is not part of this task and cannot fetch that SHA until a later authorized push. The container is not deployed.
+`cdace37c4197bef625376f5fdf6c4a2c3efe8c31` is the `impl/r1-2026-11-06` head, package version `0.6.4.102`. That commit keeps the BabelDOC lock on PyMuPDF 1.x. The image install uses this full SHA, and the Dockerfile requires `pymupdf>=1.26.7,<2`.
 
 Do not build with the previous command that omits `BABELDOC_REF`. Compose rejects an unset or empty value. The Dockerfile rejects any value that is not 40 lowercase hex characters, including `main`, a short SHA, a non-hex string, and an uppercase SHA.
 
@@ -18,17 +18,15 @@ SHA-256: `2381bc95bdd81584855d06f904ad932bb4c99d26a57d9da35e920764b558251a`
 
 `services.pdfmt-next.build.args.BABELDOC_REF` is `${BABELDOC_REF:?BABELDOC_REF must be a full commit SHA}`. `context` remains `./PDFMathTranslate-next`. `dockerfile` remains `Dockerfile`. The Dockerfile argument name is `BABELDOC_REF`.
 
-## Later build
-
-Run this only after that BabelDOC commit is pushed and a build is separately authorized. Do not run it for this task. Do not rebuild or restart a container from this document.
+## Image build
 
 ```
 BABELDOC_REF=<40位小写SHA> docker compose -f /Users/yun/Nextcloud/Project/PDFMathTranslate-next/docker-compose.yml build pdfmt-next
 ```
 
-After the local head is pushed, the same command uses `BABELDOC_REF=abf0390bf98efe9c08057b3c1cfca3bb4aa199e8`.
+The release command uses `BABELDOC_REF=cdace37c4197bef625376f5fdf6c4a2c3efe8c31`.
 
-Before that later build, confirm `BABELDOC_REF` is this full SHA. The Dockerfile accepts any 40 lowercase hex characters, so an older full SHA such as `98c63369382c72a738c289b702ebd46b956569a2` still passes the check and skips the PyMuPDF 1.x pin. Do not build from this document.
+Before building, confirm `BABELDOC_REF` is this full SHA. The Dockerfile accepts any 40 lowercase hex characters, so an older full SHA such as `98c63369382c72a738c289b702ebd46b956569a2` still passes the check and skips the PyMuPDF 1.x pin.
 
 ## Read-only check
 
@@ -40,4 +38,4 @@ python -m pdf2zh_next.runtime_manifest --out /tmp/runtime-manifest.json --deeplx
 
 Compare BabelDOC path, version, and git revision; consumer path, version, and git revision; and the DeepLX sha256. A null git revision means that directory is not a repository or `git rev-parse HEAD` failed. Do not store `main` or `latest` in its place.
 
-A passing manifest on a development machine is not a deployment. Deploy and restart stay a later, separate operation.
+A passing manifest on a development machine is not a deployment. Compare it with the running container after the image is recreated.

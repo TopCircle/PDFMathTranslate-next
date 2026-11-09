@@ -30,6 +30,6 @@ RUN if ! printf '%s' "$BABELDOC_REF" | grep -Eq '^[0-9a-f]{40}$'; then \
       exit 1; \
     fi
 
-RUN uv pip install --system --no-cache . && uv pip install --system --no-cache --compile-bytecode -U "babeldoc @ git+https://github.com/TopCircle/BabelDOC.git@${BABELDOC_REF}" "pymupdf>=1.26.7" && babeldoc --version && babeldoc --warmup
+RUN uv pip install --system --no-cache . && uv pip install --system --no-cache --compile-bytecode -U "babeldoc @ git+https://github.com/TopCircle/BabelDOC.git@${BABELDOC_REF}" "pymupdf>=1.26.7,<2" && babeldoc --version && babeldoc --warmup
 RUN pdf2zh --version
 CMD ["pdf2zh", "--gui"]

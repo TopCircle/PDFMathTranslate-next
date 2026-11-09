@@ -26,7 +26,7 @@ COMPOSE_CMD = (
     "/Users/yun/Nextcloud/Project/PDFMathTranslate-next/docker-compose.yml "
     "build pdfmt-next"
 )
-EXPECTED_BABELDOC_SHA = "abf0390bf98efe9c08057b3c1cfca3bb4aa199e8"
+EXPECTED_BABELDOC_SHA = "cdace37c4197bef625376f5fdf6c4a2c3efe8c31"
 FIXTURE_KEY = "fixture-test-key-DO-NOT-LEAK"
 FIXTURE_ENDPOINT = "https://fixture.invalid/translate"
 MOUNT_MARKERS = ("/app/BabelDOC", "/app/PDFMathTranslate-next")
@@ -100,10 +100,10 @@ def test_verification_doc_matches_dockerfile_arg_and_compose_digest():
     assert env_name in arg_names
     assert env_name == "BABELDOC_REF"
     assert EXPECTED_BABELDOC_SHA in doc
-    assert "not pushed" in doc
+    assert "0.6.4.102" in doc
     digest = hashlib.sha256(COMPOSE.read_bytes()).hexdigest()
     assert digest in doc
-    assert "is not deployed" in doc
+    assert "pymupdf>=1.26.7,<2" in dockerfile
 
 
 @pytest.mark.parametrize(
