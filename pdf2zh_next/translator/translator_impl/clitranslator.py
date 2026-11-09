@@ -64,13 +64,53 @@ def _explicit_identity_declared(cli_settings: CLISettings) -> bool:
     )
 
 
+_DEEPLX_NORMALIZER_NAME = "normalize_extracted_en.py"
+
+
+def _script_mentions_deeplx_normalizer(script: Path) -> bool:
+    try:
+        text = script.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    return _DEEPLX_NORMALIZER_NAME in text
+
+
+def _deeplx_normalizer_path(script: Path) -> Path | None:
+    """File DeepLX would load for this script. Other scripts return None.
+
+    Sibling wins, matching the adapter. The home fallback is used only when
+    that sibling is absent. This does not read argv.
+    """
+    if not _script_mentions_deeplx_normalizer(script):
+        return None
+    try:
+        resolved = script.expanduser().resolve(strict=False)
+    except OSError:
+        return None
+    sibling = resolved.parent / _DEEPLX_NORMALIZER_NAME
+    if sibling.is_file():
+        return sibling
+    home = Path.home() / ".config" / "pdf2zh" / "deeplx" / _DEEPLX_NORMALIZER_NAME
+    if home.is_file():
+        return home
+    return None
+
+
 def _implementation_paths(cli_settings: CLISettings) -> list[Path]:
-    """Script that will run, plus paths the user listed. Not argv guesses."""
+    """Script that will run, its DeepLX normalizer, and paths the user listed.
+
+    The normalizer is included only when this script is the DeepLX adapter
+    and the file it would load exists. Argv strings are not paths.
+    """
     paths: list[Path] = []
     if not _nonempty(cli_settings.clitranslator_command):
         script = _nonempty(cli_settings.clitranslator_script)
         if script:
-            paths.append(Path(script))
+            script_path = Path(script)
+            paths.append(script_path)
+            normalizer = _deeplx_normalizer_path(script_path)
+            if normalizer is not None:
+                paths.append(normalizer)
     paths.extend(Path(line) for line in _cache_file_lines(cli_settings))
     return paths
 
@@ -190,7 +230,11 @@ class CLITranslatorTranslator(BaseTranslator):
         glossary: /root/.config/pdf2zh/glossaries/sextips.csv
         proper_nouns: /root/.config/pdf2zh/glossaries/proper_nouns.csv
         urls: one DeepLX endpoint per line
-        cache_files: /root/.config/pdf2zh/deeplx/normalize_extracted_en.py
+        cache_files: other local dependencies, one per line
+
+    A decomposed DeepLX script already fingerprints ``normalize_extracted_en.py``:
+    the copy beside the script, or ``~/.config/pdf2zh/deeplx/`` when that
+    sibling is absent. Listing the same file in ``cache_files`` is optional.
     """
 
     name = "clitranslator"

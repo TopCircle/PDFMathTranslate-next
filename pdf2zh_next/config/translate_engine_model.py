@@ -829,12 +829,16 @@ class CLISettings(BaseModel):
         proper_nouns: /root/.config/pdf2zh/glossaries/proper_nouns.csv
         urls: (one URL per line)
         https://deeplx.example/translate
-        cache_files: (one local dependency per line; not an argument to the program)
+        cache_files: (other local dependencies, one per line; not an argument)
         /root/.config/pdf2zh/deeplx/normalize_extracted_en.py
 
-    ``cache_files`` and ``cache_revision`` affect only the outer translation
-    cache. A new implementation identity misses that cache. Do not delete the
-    existing cache or retranslate a whole book because of the miss.
+    A decomposed DeepLX script fingerprints ``normalize_extracted_en.py``
+    without ``cache_files``: the file beside the script, or
+    ``~/.config/pdf2zh/deeplx/normalize_extracted_en.py`` when the sibling
+    is absent. ``cache_files`` and ``cache_revision`` affect only the outer
+    translation cache. A new implementation identity misses that cache. Do
+    not delete the existing cache or retranslate a whole book because of
+    the miss.
 
     Advanced: set ``clitranslator_command`` to a full shell command string to
     override the decomposed fields (legacy configs still work).
@@ -903,9 +907,11 @@ class CLISettings(BaseModel):
     clitranslator_cache_files: str | None = Field(
         default=None,
         description=(
-            "Local files that define this CLI implementation, one path per line "
-            "(normalizer, extra modules, postprocess script). Not passed to the "
-            "program. Example: "
+            "Other local files that define this CLI implementation, one path "
+            "per line. Not passed to the program. A DeepLX script already "
+            "includes normalize_extracted_en.py beside the script, or "
+            "~/.config/pdf2zh/deeplx/normalize_extracted_en.py when that "
+            "sibling is absent. Example: "
             "/root/.config/pdf2zh/deeplx/normalize_extracted_en.py. "
             "A content change misses the outer cache; do not delete the old "
             "cache or retranslate a whole book for that miss."

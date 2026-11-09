@@ -31,7 +31,7 @@ from pdf2zh_next.translator.translator_impl.bing import BingTranslator
 from pdf2zh_next.translator.translator_impl.clitranslator import CLITranslatorTranslator
 
 DEEPLX_DIR = Path("/Users/yun/Nextcloud/Project/PDFMathTranslate-next/config/deeplx")
-DEEPLX_SHA256 = "f2ecffffff5485a7734d0fceabe4d0621b41715f20171e0b51707138942c13c1"
+DEEPLX_SHA256 = "9d910f3f603ccf984ab2d8120a2def2724c070787296eade22349de49d6086a9"
 LAYER_SOURCE = "Please use the API."
 STALE_TRANSLATION = "请使用调用服务。"
 FULL_TRANSLATION = "请使用 API 调用服务。"
@@ -875,3 +875,229 @@ def test_two_cache_layers_do_not_promote_old_cleaned_result(
     assert counter.read_text(encoding="utf-8") == "1"
     assert script.read_bytes() == script_bytes
     assert normalizer.read_bytes() == normalizer_bytes
+
+
+def _env_output_script(counter: Path, env_name: str, note: str = "") -> str:
+    """Script bytes stay fixed while the returned text comes from the environment."""
+    return (
+        "import os\n"
+        "import sys\n"
+        "from pathlib import Path\n"
+        f"counter = Path({str(counter)!r})\n"
+        "current = int(counter.read_text(encoding='utf-8') or '0') "
+        "if counter.exists() else 0\n"
+        "counter.write_text(str(current + 1), encoding='utf-8')\n"
+        "sys.stdin.read()\n"
+        f"sys.stdout.buffer.write(os.environ[{env_name!r}].encode('utf-8'))\n"
+        f"{note}\n"
+    )
+
+
+def _arm_deeplx_http(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    expected: str,
+    full: str,
+) -> Path:
+    counter = tmp_path / "http_calls"
+    if not counter.exists():
+        counter.write_text("0", encoding="utf-8")
+    site_dir = tmp_path / "pypath"
+    site_dir.mkdir(exist_ok=True)
+    site_file = site_dir / "sitecustomize.py"
+    if not site_file.exists():
+        site_file.write_text(_SITECUSTOMIZE, encoding="utf-8")
+    previous = os.environ.get("PYTHONPATH")
+    pythonpath = str(site_dir)
+    if previous and str(site_dir) not in previous.split(os.pathsep):
+        pythonpath = pythonpath + os.pathsep + previous
+    monkeypatch.setenv("PYTHONPATH", pythonpath)
+    monkeypatch.setenv("PYTHONIOENCODING", "utf-8")
+    monkeypatch.setenv("PDF2ZH_TEST_HTTP_CALLS", str(counter))
+    monkeypatch.setenv("PDF2ZH_TEST_EXPECT_PAYLOAD", expected)
+    monkeypatch.setenv("PDF2ZH_TEST_FULL", full)
+    return counter
+
+
+def test_undeclared_deeplx_normalizer_edit_misses_outer_cache(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """Sibling normalize_extracted_en.py is part of the key even when cache_files is unset."""
+    from pdf2zh_next.translator.translator_impl.cli_cache_identity import (
+        implementation_fingerprint,
+    )
+    from pdf2zh_next.translator.translator_impl import clitranslator as cli_mod
+
+    adapter_dir = tmp_path / "adapter"
+    adapter_dir.mkdir()
+    script = adapter_dir / "deeplx.py"
+    normalizer = adapter_dir / "normalize_extracted_en.py"
+    script.write_bytes((DEEPLX_DIR / "deeplx.py").read_bytes())
+    normalizer_bytes = (DEEPLX_DIR / "normalize_extracted_en.py").read_bytes()
+    normalizer.write_bytes(normalizer_bytes)
+    home = tmp_path / "home"
+    home_normalizer = home / ".config" / "pdf2zh" / "deeplx" / "normalize_extracted_en.py"
+    home_normalizer.parent.mkdir(parents=True)
+    home_normalizer.write_text("home-normalizer\n", encoding="utf-8")
+    monkeypatch.setattr(cli_mod.Path, "home", lambda: home)
+
+    module = _load_deeplx_copy(script)
+    normalized = module.rewrite_bold_glossary_labels(
+        module.fix_pdf_spans(
+            module.normalize_for_mt(module.clean_unicode(LAYER_SOURCE))
+        ),
+        {},
+    )
+    first_text = "第一次译文"
+    second_text = "第二次译文"
+    counter = _arm_deeplx_http(
+        tmp_path, monkeypatch, expected=normalized, full=first_text
+    )
+    cooldown = tmp_path / "cooldown"
+    extra = " ".join(
+        [
+            "--max-retries",
+            "1",
+            "--cooldown-seconds",
+            "1",
+            "--timeout",
+            "10",
+            "--cooldown-file",
+            shlex.quote(str(cooldown)),
+        ]
+    )
+
+    def make():
+        settings = CLISettings(
+            clitranslator_program=sys.executable,
+            clitranslator_script=str(script),
+            clitranslator_urls="http://127.0.0.1:9/local-oneshot-mock",
+            clitranslator_extra_args=extra,
+            clitranslator_timeout="30",
+        )
+        assert settings.clitranslator_cache_files is None
+        translator = _translator(settings)
+        assert translator.ignore_cache is False
+        return translator
+
+    first = make()
+    assert first.translate(LAYER_SOURCE) == first_text
+    assert first.translate_cache_call_count == 0
+    assert counter.read_text(encoding="utf-8") == "1"
+    again = make()
+    assert again.translate(LAYER_SOURCE) == first_text
+    assert again.translate_cache_call_count == 1
+    assert counter.read_text(encoding="utf-8") == "1"
+
+    normalizer.write_bytes(normalizer_bytes + b"\n# cache-bust\n")
+    monkeypatch.setenv("PDF2ZH_TEST_FULL", second_text)
+    edited = make()
+    assert edited.translate(LAYER_SOURCE) == second_text
+    assert edited.translate_cache_call_count == 0
+    assert counter.read_text(encoding="utf-8") == "2"
+    assert _params(edited)["clitranslator_impl_fingerprint"] == (
+        implementation_fingerprint([script, normalizer], revision="")
+    )
+    assert home_normalizer.read_text(encoding="utf-8") == "home-normalizer\n"
+
+
+def test_home_normalizer_edit_misses_when_deeplx_has_no_sibling(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    from pdf2zh_next.translator.translator_impl.cli_cache_identity import (
+        implementation_fingerprint,
+    )
+    from pdf2zh_next.translator.translator_impl import clitranslator as cli_mod
+
+    home = tmp_path / "home"
+    normalizer = home / ".config" / "pdf2zh" / "deeplx" / "normalize_extracted_en.py"
+    normalizer.parent.mkdir(parents=True)
+    normalizer.write_text("home-v1\n", encoding="utf-8")
+    monkeypatch.setattr(cli_mod.Path, "home", lambda: home)
+    counter = tmp_path / "calls"
+    script = tmp_path / "adapter" / "deeplx.py"
+    script.parent.mkdir()
+    script.write_text(
+        _env_output_script(
+            counter,
+            "PDF2ZH_TEST_CLI_OUTPUT",
+            note="# loads normalize_extracted_en.py",
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("PDF2ZH_TEST_CLI_OUTPUT", "第一次译文")
+
+    def make():
+        translator = _translator(
+            CLISettings(
+                clitranslator_program=sys.executable,
+                clitranslator_script=str(script),
+                clitranslator_timeout="30",
+            )
+        )
+        assert translator.ignore_cache is False
+        return translator
+
+    assert make().translate("home-normalizer-source") == "第一次译文"
+    assert counter.read_text(encoding="utf-8") == "1"
+    hit = make()
+    assert hit.translate("home-normalizer-source") == "第一次译文"
+    assert hit.translate_cache_call_count == 1
+    assert counter.read_text(encoding="utf-8") == "1"
+
+    normalizer.write_text("home-v2\n", encoding="utf-8")
+    monkeypatch.setenv("PDF2ZH_TEST_CLI_OUTPUT", "第二次译文")
+    missed = make()
+    assert missed.translate("home-normalizer-source") == "第二次译文"
+    assert missed.translate_cache_call_count == 0
+    assert counter.read_text(encoding="utf-8") == "2"
+    assert _params(missed)["clitranslator_impl_fingerprint"] == (
+        implementation_fingerprint([script, normalizer], revision="")
+    )
+
+
+def test_unrelated_script_ignores_normalizer_files(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    from pdf2zh_next.translator.translator_impl.cli_cache_identity import (
+        implementation_fingerprint,
+    )
+    from pdf2zh_next.translator.translator_impl import clitranslator as cli_mod
+
+    home = tmp_path / "home"
+    home_normalizer = home / ".config" / "pdf2zh" / "deeplx" / "normalize_extracted_en.py"
+    home_normalizer.parent.mkdir(parents=True)
+    home_normalizer.write_text("home-v1\n", encoding="utf-8")
+    monkeypatch.setattr(cli_mod.Path, "home", lambda: home)
+    counter = tmp_path / "calls"
+    script = tmp_path / "run.py"
+    script.write_text(
+        _env_output_script(counter, "PDF2ZH_TEST_CLI_OUTPUT"),
+        encoding="utf-8",
+    )
+    sibling = tmp_path / "normalize_extracted_en.py"
+    sibling.write_text("sibling-v1\n", encoding="utf-8")
+    monkeypatch.setenv("PDF2ZH_TEST_CLI_OUTPUT", "第一次译文")
+
+    def make():
+        return _translator(
+            CLISettings(
+                clitranslator_program=sys.executable,
+                clitranslator_script=str(script),
+                clitranslator_timeout="30",
+            )
+        )
+
+    assert make().translate("unrelated-source") == "第一次译文"
+    sibling.write_text("sibling-v2\n", encoding="utf-8")
+    home_normalizer.write_text("home-v2\n", encoding="utf-8")
+    monkeypatch.setenv("PDF2ZH_TEST_CLI_OUTPUT", "第二次译文")
+    second = make()
+    assert second.ignore_cache is False
+    assert second.translate("unrelated-source") == "第一次译文"
+    assert second.translate_cache_call_count == 1
+    assert counter.read_text(encoding="utf-8") == "1"
+    assert _params(second)["clitranslator_impl_fingerprint"] == (
+        implementation_fingerprint([script], revision="")
+    )
