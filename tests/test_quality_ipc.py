@@ -21,6 +21,7 @@ CALLBACK_OUTPUTS = 19
 DEGRADED_MESSAGE = "文件已生成，1 项需复核"
 SUCCESS_MESSAGE = "翻译完成"
 UNKNOWN_MESSAGE = "文件已生成，未提供质量报告"
+FAILED_PARTS_MESSAGE = "文件已生成，部分段落未排入"
 
 
 class ProgressLog:
@@ -400,6 +401,33 @@ def test_sessions_and_next_batch_reset_quality(isolated_gui, tmp_path, monkeypat
     assert state_a["results"]["next.pdf"]["quality"]["status"] == "success"
     assert state_a["quality_by_file"] == {}
     assert kept["status"] == "degraded"
+
+
+def test_finished_layout_failure_still_offers_the_pdf(isolated_gui, tmp_path, monkeypatch):
+    gui, _config_dir = isolated_gui
+    source = tmp_path / "partial.pdf"
+    source.write_bytes(b"%PDF")
+    report = tmp_path / "partial.runpartial.quality.json"
+    _write_report(report, "failed")
+    specs = {
+        "partial.pdf": {
+            "status": "failed",
+            "warning_count": 0,
+            "report": report,
+        }
+    }
+    _patch_translation(monkeypatch, gui, specs)
+    state = _state()
+    _bind_ui(monkeypatch, gui, state)
+    progress = ProgressLog()
+    yields = _run(gui, state, [source], progress, monkeypatch, tmp_path)
+
+    assert yields[-1][7]["value"] == FAILED_PARTS_MESSAGE
+    assert progress.calls[-1]["desc"] == FAILED_PARTS_MESSAGE
+    assert Path(state["results"]["partial.pdf"]["mono"]).is_file()
+    assert Path(state["results"]["partial.pdf"]["dual"]).is_file()
+    assert state["results"]["partial.pdf"]["quality"]["status"] == "failed"
+    assert state["results"]["partial.pdf"]["quality"]["report_path"] == str(report)
 
 
 def test_failed_run_has_no_success_message(isolated_gui, tmp_path, monkeypatch):

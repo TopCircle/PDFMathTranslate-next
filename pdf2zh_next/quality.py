@@ -13,11 +13,17 @@ class FileQuality(TypedDict):
 
 
 def quality_message(status: str | None, *, warning_count: int) -> str:
-    """User-facing batch text. Failed is not a completion message."""
+    """User-facing batch text for a finished file.
+
+    ``failed`` here means the file was written and some parts are marked.
+    A translation that raised still never reaches this function.
+    """
     if status == "success":
         return "翻译完成"
     if status == "degraded":
         return f"文件已生成，{warning_count} 项需复核"
+    if status == "failed":
+        return "文件已生成，部分段落未排入"
     if status is None:
         return "文件已生成，未提供质量报告"
     raise ValueError(f"quality status {status} is not a completion message")

@@ -10,8 +10,9 @@ def test_quality_message_maps_completion_and_rejects_failed():
     assert quality_message("degraded", warning_count=1) == "文件已生成，1 项需复核"
     assert quality_message("degraded", warning_count=3) == "文件已生成，3 项需复核"
     assert quality_message(None, warning_count=0) == "文件已生成，未提供质量报告"
+    assert quality_message("failed", warning_count=0) == "文件已生成，部分段落未排入"
     with pytest.raises(ValueError):
-        quality_message("failed", warning_count=0)
+        quality_message("unknown", warning_count=0)
 
 
 def test_summarize_batch_quality_priority_and_empty_collection():
