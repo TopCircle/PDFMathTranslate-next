@@ -3,10 +3,13 @@ import logging
 import re
 from abc import ABC
 from abc import abstractmethod
+from collections.abc import Callable
 
 from pdf2zh_next.config.model import SettingsModel
 from pdf2zh_next.translator.base_rate_limiter import BaseRateLimiter
 from pdf2zh_next.translator.cache import TranslationCache
+from pdf2zh_next.translator.translation_outcome import TranslationOutcome
+from pdf2zh_next.translator.translation_outcome import as_translation_outcome
 
 logger = logging.getLogger(__name__)
 
@@ -70,46 +73,49 @@ class BaseTranslator(ABC):
         self.cache.add_params(k, v)
 
     def translate(self, text, ignore_cache=False, rate_limit_params: dict = None):
-        """
-        Translate the text, and the other part should call this method.
-        :param text: text to translate
-        :return: translated text
-        """
-        self.translate_call_count += 1
-        if not (self.ignore_cache or ignore_cache):
-            try:
-                cache = self.cache.get(text)
-                if cache is not None:
-                    self.translate_cache_call_count += 1
-                    return cache
-            except Exception as e:
-                logger.debug(f"try get cache failed, ignore it: {e}")
-        self.rate_limiter.wait(rate_limit_params)
-        translation = self.do_translate(text, rate_limit_params)
-        if not (self.ignore_cache or ignore_cache):
-            self.cache.set(text, translation)
-        return translation
+        return self.translate_with_metadata(text, ignore_cache, rate_limit_params).text
 
     def llm_translate(self, text, ignore_cache=False, rate_limit_params: dict = None):
-        """
-        Translate the text, and the other part should call this method.
-        :param text: text to translate
-        :return: translated text
-        """
+        return self.llm_translate_with_metadata(
+            text, ignore_cache, rate_limit_params
+        ).text
+
+    def translate_with_metadata(
+        self, text, ignore_cache=False, rate_limit_params: dict = None
+    ) -> TranslationOutcome:
+        return self._translate_cached(
+            self.do_translate, text, ignore_cache, rate_limit_params
+        )
+
+    def llm_translate_with_metadata(
+        self, text, ignore_cache=False, rate_limit_params: dict = None
+    ) -> TranslationOutcome:
+        return self._translate_cached(
+            self.do_llm_translate, text, ignore_cache, rate_limit_params
+        )
+
+    def _translate_cached(
+        self,
+        operation: Callable[..., str | TranslationOutcome],
+        text: str,
+        ignore_cache: bool,
+        rate_limit_params: dict | None,
+    ) -> TranslationOutcome:
         self.translate_call_count += 1
-        if not (self.ignore_cache or ignore_cache):
+        use_cache = not (self.ignore_cache or ignore_cache)
+        if use_cache:
             try:
-                cache = self.cache.get(text)
-                if cache is not None:
+                cached = self.cache.get(text)
+                if cached is not None:
                     self.translate_cache_call_count += 1
-                    return cache
+                    return TranslationOutcome(cached)
             except Exception as e:
                 logger.debug(f"try get cache failed, ignore it: {e}")
         self.rate_limiter.wait(rate_limit_params)
-        translation = self.do_llm_translate(text, rate_limit_params)
-        if not (self.ignore_cache or ignore_cache):
-            self.cache.set(text, translation)
-        return translation
+        outcome = as_translation_outcome(operation(text, rate_limit_params))
+        if use_cache and outcome.cacheable:
+            self.cache.set(text, outcome.text)
+        return outcome
 
     def do_llm_translate(self, text, rate_limit_params: dict = None):
         """

@@ -31,7 +31,7 @@ from pdf2zh_next.translator.cache import init_test_db
 from pdf2zh_next.translator.translator_impl.bing import BingTranslator
 from pdf2zh_next.translator.translator_impl.clitranslator import CLITranslatorTranslator
 
-DEEPLX_SHA256 = "172063fa62487a2c35a88ddd47f12d47306e7d300c042daea79ea2ea7434b990"
+DEEPLX_SHA256 = "100377bb9e69573df7284dc1e4fc051d3e77ccd83c5eac484f8131b8441b8295"
 
 
 def _external_deeplx_dir() -> Path | None:
@@ -1330,3 +1330,39 @@ def test_child_import_environment_still_fingerprints_the_normalizer(
     assert _params(missed)["clitranslator_impl_fingerprint"] == (
         implementation_fingerprint([script, normalizer], revision="")
     )
+
+
+
+def test_fragment_recovery_warning_survives_cli_and_bypasses_outer_cache(tmp_path):
+    script = tmp_path / "recover.py"
+    script.write_text(
+        _constant_script("恢复后的译文。")
+        + "sys.stderr.write('[quality] mask_fragment_recovery')\n",
+        encoding="utf-8",
+    )
+    translator = _translator(CLISettings(
+        clitranslator_program=sys.executable, clitranslator_script=str(script),
+        clitranslator_timeout="30",
+    ))
+    first = translator.translate_with_metadata("fragment-warning-source")
+    second = translator.translate("fragment-warning-source")
+    assert first.text == second == "恢复后的译文。"
+    assert first.warnings == ("mask_fragment_recovery",)
+    assert translator.translate_cache_call_count == 0
+    assert _TranslationCache.select().where(
+        _TranslationCache.original_text == "fragment-warning-source"
+    ).count() == 0
+
+
+def test_base_translator_import_does_not_require_new_babeldoc_outcome_module(monkeypatch):
+    import builtins
+    from pdf2zh_next.translator import base_translator
+    original_import = builtins.__import__
+    def supported_babeldoc_import(name, *args, **kwargs):
+        if name == "babeldoc.translator.translation_outcome":
+            raise ModuleNotFoundError(name)
+        return original_import(name, *args, **kwargs)
+    monkeypatch.setattr(builtins, "__import__", supported_babeldoc_import)
+    spec = importlib.util.spec_from_file_location("compat_base_translator", base_translator.__file__)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)

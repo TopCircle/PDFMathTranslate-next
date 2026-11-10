@@ -12,6 +12,7 @@ from pdf2zh_next.config.model import SettingsModel
 from pdf2zh_next.config.translate_engine_model import CLISettings
 from pdf2zh_next.translator.base_rate_limiter import BaseRateLimiter
 from pdf2zh_next.translator.base_translator import BaseTranslator
+from pdf2zh_next.translator.translation_outcome import TranslationOutcome
 from pdf2zh_next.translator.translator_impl.cli_cache_identity import (
     CLITRANSLATOR_IMPL_SCHEMA,
 )
@@ -350,7 +351,7 @@ class CLITranslatorTranslator(BaseTranslator):
         wait=wait_exponential(multiplier=2, min=2, max=15),
         before_sleep=before_sleep_log(logger, logging.WARNING),
     )
-    def do_translate(self, text, rate_limit_params: dict = None) -> str:
+    def do_translate(self, text, rate_limit_params: dict = None) -> str | TranslationOutcome:
         """Execute translation using the configured CLI tool"""
 
         cmd = [self.command] + self.args
@@ -366,6 +367,7 @@ class CLITranslatorTranslator(BaseTranslator):
                 text=True,
                 encoding="utf-8",
                 errors="replace",
+                env={**os.environ, "PDF2ZH_CLI_TOTAL_TIMEOUT": str(max(1, self.timeout - 3))},
             )
             stdout, stderr = process.communicate(input=text, timeout=self.timeout)
 
@@ -384,6 +386,9 @@ class CLITranslatorTranslator(BaseTranslator):
             if self.postprocess_command:
                 output = self._run_postprocess(output)
 
+            if "[quality] mask_fragment_recovery" in stderr.splitlines():
+                logger.warning("CLI translation recovered from mask loss; review fluency")
+                return TranslationOutcome(output.strip(), ("mask_fragment_recovery",))
             return output.strip()
 
         except subprocess.TimeoutExpired:
